@@ -1,0 +1,40 @@
+# ==========================================
+# ESP32 / PlatformIO Build Files
+# ==========================================
+esp32_firmware/.pio/
+esp32_firmware/.vscode/
+esp32_firmware/lib/
+*.bin
+*.elf
+*.map
+
+# ==========================================
+# ROS 2 Workspace (Colcon)
+# ==========================================
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+*.cmake
+Makefile
+
+# ==========================================
+# Python / Node Caches
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# ==========================================
+# OS / Editor Files
+# ==========================================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.idea/
+*.swp
+*~
