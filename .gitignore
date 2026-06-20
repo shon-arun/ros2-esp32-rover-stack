@@ -11,9 +11,9 @@ esp32_firmware/lib/
 # ==========================================
 # ROS 2 Workspace (Colcon)
 # ==========================================
-ros2_ws/build/
-ros2_ws/install/
-ros2_ws/log/
+microros_ws/build/
+microros_ws/install/
+microros_ws/log/
 *.cmake
 Makefile
 
@@ -32,9 +32,15 @@ __pycache__/
 .DS_Store
 .AppleDouble
 .LSOverride
+.vscode
 ._*
 .Spotlight-V100
 .Trashes
 .idea/
 *.swp
 *~
+.pio
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch
