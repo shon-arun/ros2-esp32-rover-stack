@@ -1,0 +1,25 @@
+teleop_node:
+  ros__parameters:
+    enable_button: 4        # Left Bumper: Normal driving
+    enable_turbo_button: 5  # Right Bumper: G-Turn pivot override
+
+    deadzone: 0.0
+    autorepeat_rate: 20.0
+
+    # --- Arcade Steering (Left Stick Only) ---
+    axis_linear:
+      x: 4   # Right Stick Up/Down
+    axis_angular:
+      yaw: 0 # Left Stick Left/Right
+
+    # --- Profile 1: Normal Sweeping Arcs ---
+    scale_linear:
+      x: 1.0
+    scale_angular:
+      yaw: 0.96  # Restricted to prevent inner wheel stall
+
+    # --- Profile 2: The G-Turn Override ---
+    scale_linear_turbo:
+      x: 1.0
+    scale_angular_turbo:
+      yaw: 2.5  # Unrestricted for maximum breakout torque

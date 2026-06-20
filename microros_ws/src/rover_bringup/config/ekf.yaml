@@ -1,0 +1,31 @@
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    two_d_mode: true       # <--- CRITICAL: Unlocks Z, Roll, and Pitch
+    publish_tf: true
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom
+
+    # --- SENSOR 1: Wheel Odometry ---
+    odom0: /odom
+    # We ONLY feed X-velocity from the wheels. In the air, this reads 0.0.
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
+                   false, false, false,
+                   false, false, false]
+
+    # --- SENSOR 2: IMU ---
+    imu0: /imu/data
+    # We feed the EKF everything except absolute X/Y/Z position.
+    imu0_config: [false, false, false,
+                  true,  true,  true,     # <--- Roll, Pitch, Yaw
+                  false, false, false,
+                  true,  true,  true,     # <--- Angular Velocities (X, Y, Z)
+                  false,  false,  false]     # <--- Linear Accelerations (X, Y, Z)
+
+    # CRITICAL: If false, the 9.8m/s^2 gravity vector will shoot your RViz arrow into orbit.
+    imu0_remove_gravitational_acceleration: true
