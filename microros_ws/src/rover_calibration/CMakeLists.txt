@@ -23,11 +23,18 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+# --- Square Driver Target ---
 add_executable(square_driver src/square_driver.cpp)
 ament_target_dependencies(square_driver rclcpp geometry_msgs nav_msgs)
 
+# --- Straight Line Driver Target ---
+add_executable(straight_line_driver src/straight_line_driver.cpp)
+ament_target_dependencies(straight_line_driver rclcpp geometry_msgs nav_msgs)
+
+# Install both executables
 install(TARGETS
   square_driver
+  straight_line_driver
   DESTINATION lib/${PROJECT_NAME}
 )
 
