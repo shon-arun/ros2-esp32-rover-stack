@@ -125,8 +125,11 @@ typedef struct {
 
 // Initialize memory states with baseline tuning parameters
 // target, slewed, current, prev_vel, prev_ticks_F, prev_ticks_R, prev_error, integral, K_v, K_s, K_p, K_i, K_d, max_accel
-MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 115.0, 40.0, 20.0, 0.0, 1.5};
-MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 125.0, 40.0, 20.0, 0.0, 1.5};
+// MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 115.0, 40.0, 20.0, 0.0, 1.5};
+// MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 125.0, 40.0, 20.0, 0.0, 1.5};
+
+MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 98.0, 0.0, 0.0, 0.0, 1.5};
+MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 98.0, 0.0, 0.0, 0.0, 1.5};
 
 // FreeRTOS Mutex for safe interrupt reading
 portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
