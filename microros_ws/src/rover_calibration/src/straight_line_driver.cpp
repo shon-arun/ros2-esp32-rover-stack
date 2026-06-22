@@ -3,6 +3,7 @@
 #include <nav_msgs/msg/odometry.hpp>
 #include <cmath>
 #include <algorithm>
+#include <chrono>
 
 class StraightLineDriver : public rclcpp::Node {
 public:
@@ -29,9 +30,13 @@ public:
         odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
             "odometry/filtered", 10, std::bind(&StraightLineDriver::odom_callback, this, std::placeholders::_1));
 
-        dt_ = 0.02; 
+        // Start clocks
+        last_time_ = this->get_clock()->now();
+        last_odom_time_ = last_time_;
+
+        // 50 Hz control loop
         timer_ = this->create_wall_timer(
-            std::chrono::milliseconds(static_cast<int>(dt_ * 1000)),
+            std::chrono::milliseconds(20),
             std::bind(&StraightLineDriver::control_loop, this));
 
         RCLCPP_INFO(this->get_logger(), "Professional Straight Line Planner Initialized. Waiting for EKF Odometry...");
@@ -46,25 +51,27 @@ private:
     double start_x_, start_y_, start_yaw_;
     double v_cmd_;
 
-    double target_distance_, max_vel_, max_accel_, kp_yaw_, max_angular_velocity_, tolerance_, min_sustainable_vel_, dt_;
+    double target_distance_, max_vel_, max_accel_, kp_yaw_, max_angular_velocity_, tolerance_, min_sustainable_vel_;
+    
+    rclcpp::Time last_time_;
+    rclcpp::Time last_odom_time_;
 
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::TimerBase::SharedPtr timer_;
 
-    double euler_from_quaternion(double x, double y, double z, double w) {
-        double siny_cosp = 2.0 * (w * z + x * y);
-        double cosy_cosp = 1.0 - 2.0 * (y * y + z * z);
-        return std::atan2(siny_cosp, cosy_cosp);
+    // Fast quaternion to yaw calculation
+    inline double euler_from_quaternion(double x, double y, double z, double w) const {
+        return std::atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
     }
 
-    double normalize_angle(double angle) {
-        while (angle > M_PI) angle -= 2.0 * M_PI;
-        while (angle < -M_PI) angle += 2.0 * M_PI;
-        return angle;
+    // O(1) angle normalization using std::remainder
+    inline double normalize_angle(double angle) const {
+        return std::remainder(angle, 2.0 * M_PI);
     }
 
     void odom_callback(const nav_msgs::msg::Odometry::SharedPtr msg) {
+        last_odom_time_ = this->get_clock()->now();
         current_x_ = msg->pose.pose.position.x;
         current_y_ = msg->pose.pose.position.y;
 
@@ -77,23 +84,48 @@ private:
         }
     }
 
+    void publish_stop() {
+        geometry_msgs::msg::Twist stop_msg;
+        stop_msg.linear.x = 0.0;
+        stop_msg.angular.z = 0.0;
+        cmd_pub_->publish(stop_msg);
+        v_cmd_ = 0.0;
+    }
+
     void control_loop() {
         if (state_ == WAITING_FOR_ODOM) return;
 
         // Ensure we cleanly hold the 0 state and gracefully shut down the node
         if (state_ == DONE) {
-            geometry_msgs::msg::Twist stop_msg;
-            stop_msg.linear.x = 0.0;
-            stop_msg.angular.z = 0.0;
-            cmd_pub_->publish(stop_msg);
-            
-            // Provide enough time for the ROS network to transmit the stop message
-            rclcpp::sleep_for(std::chrono::milliseconds(100));
+            publish_stop();
+            rclcpp::sleep_for(std::chrono::milliseconds(100)); // Ensure ROS transmits
             rclcpp::shutdown();
             return;
         }
 
+        auto now = this->get_clock()->now();
+        double dt = (now - last_time_).seconds();
+        last_time_ = now;
+
+        // Ignore massive leaps in time (e.g., waking from sleep/breakpoints) or division by zero
+        if (dt <= 0.0 || dt > 1.0) return;
+
+        // --- SAFETY WATCHDOG ---
+        // If odometry hasn't been received in 0.5 seconds, halt the motors
+        if ((now - last_odom_time_).seconds() > 0.5) {
+            publish_stop();
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000, 
+                "Odometry timeout! EKF stopped publishing. Halting rover.");
+            return;
+        }
+
         if (state_ == INIT) {
+            // Immediate exit if target is 0
+            if (std::abs(target_distance_) < tolerance_) {
+                state_ = DONE;
+                return;
+            }
+
             start_x_ = current_x_;
             start_y_ = current_y_;
             start_yaw_ = current_yaw_;
@@ -110,13 +142,10 @@ private:
             double distance_traveled = (dx * std::cos(start_yaw_)) + (dy * std::sin(start_yaw_));
             double direction = (target_distance_ >= 0.0) ? 1.0 : -1.0;
 
-            // [FIX 1 & 2] Robust Directional Line-Crossing Check
-            bool reached_target = false;
-            if (target_distance_ >= 0.0) {
-                reached_target = (distance_traveled >= target_distance_ - tolerance_);
-            } else {
-                reached_target = (distance_traveled <= target_distance_ + tolerance_);
-            }
+            // Robust Directional Line-Crossing Check
+            bool reached_target = (direction > 0.0) 
+                ? (distance_traveled >= target_distance_ - tolerance_)
+                : (distance_traveled <= target_distance_ + tolerance_);
 
             if (reached_target) {
                 state_ = DONE;
@@ -124,28 +153,24 @@ private:
                 return;
             }
 
-            // [FIX 3] True Distance Remaining calculation (avoids absolute value shrinkage)
+            // True Distance Remaining calculation (avoids absolute value shrinkage errors)
             double distance_remaining = std::abs(target_distance_ - distance_traveled);
 
             // Kinematic Velocity Profiling 
             double v_max_kinematic = std::sqrt(2.0 * max_accel_ * distance_remaining);
-            double v_target_accel = v_cmd_ + max_accel_ * dt_;
+            double v_target_accel = v_cmd_ + (max_accel_ * dt);
             
             double v_ideal = std::min({max_vel_, v_target_accel, v_max_kinematic});
             
-            // [FIX 4] Maintain minimum sustainable speed until the target line is physically crossed. 
-            // Removes the broken coasting/stall logic.
+            // Maintain minimum sustainable speed until the target line is physically crossed. 
             v_ideal = std::max(v_ideal, min_sustainable_vel_);
-            v_ideal = std::min(v_ideal, max_vel_); // Safety constraint just in case parameters are misconfigured
-
-            v_cmd_ = v_ideal;
+            
+            // Final safety clamp using standard library
+            v_cmd_ = std::clamp(v_ideal, 0.0, max_vel_);
 
             // Active Heading Correction
             double yaw_error = normalize_angle(start_yaw_ - current_yaw_);
-            double angular_cmd = kp_yaw_ * yaw_error;
-            
-            // Clamp extreme angular corrections
-            angular_cmd = std::clamp(angular_cmd, -max_angular_velocity_, max_angular_velocity_); 
+            double angular_cmd = std::clamp(kp_yaw_ * yaw_error, -max_angular_velocity_, max_angular_velocity_); 
 
             // Publish Command
             geometry_msgs::msg::Twist msg;
