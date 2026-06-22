@@ -17,12 +17,10 @@
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
 
-
 // --- Custom I2C Pins for MPU6500 ---
 #define SDA_PIN 2
 #define SCL_PIN 1
 Adafruit_MPU6050 mpu;
-
 
 // --- IMU Calibration Offsets ---
 float gyro_x_offset = 0.0;
@@ -30,7 +28,6 @@ float gyro_y_offset = 0.0;
 float gyro_z_offset = 0.0;
 float accel_x_offset = 0.0;
 float accel_y_offset = 0.0;
-
 
 // --- RGB LED Settings ---
 #define LED_PIN 48
@@ -99,37 +96,11 @@ void IRAM_ATTR isr_RR() {
 #define ENA_RL 11
 #define ENB_RR 12
 
-// --- Kinematics & PID Controllers ---
-const float MAX_SPEED_CMD = 1.0; 
-const float METERS_PER_TICK = (2.0 * PI * 0.0325) / 20.0; // 65mm wheel, 20 slots
-
-typedef struct {
-    float target_velocity;
-    float slewed_velocity;
-    float current_velocity;
-    float prev_velocity;    // Added to prevent derivative kick
-    
-    int32_t prev_ticks_F;
-    int32_t prev_ticks_R;
-
-    float prev_error;
-    float integral;
-
-    float K_v;        // Feedforward Velocity (Voltage / Speed)
-    float K_s;        // Feedforward Static Friction (Minimum PWM to move)
-    float K_p;        // Proportional
-    float K_i;        // Integral
-    float K_d;        // Derivative
-    float max_accel;  // Slew Rate (m/s^2)
-} MotorController;
-
-// Initialize memory states with baseline tuning parameters
-// target, slewed, current, prev_vel, prev_ticks_F, prev_ticks_R, prev_error, integral, K_v, K_s, K_p, K_i, K_d, max_accel
-MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 115.0, 40.0, 20.0, 0.0, 1.5};
-MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 125.0, 40.0, 20.0, 0.0, 1.5};
-
-// FreeRTOS Mutex for safe interrupt reading
-portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+// --- Rover Tuning Parameters ---
+const int MIN_PWM = 100;
+const int MAX_PWM = 255;
+const float MAX_SPEED_CMD = 1.0;
+const float DEADBAND = 0.0;
 
 // --- ROS 2 Nodes and Entities ---
 rcl_subscription_t subscriber;
@@ -166,7 +137,7 @@ int32_t prev_ticks_RL = 0;
 int32_t prev_ticks_FR = 0;
 int32_t prev_ticks_RR = 0;
 unsigned long last_stall_check_time = 0;
-const unsigned long STALL_CHECK_INTERVAL_MS = 1000;
+const unsigned long STALL_CHECK_INTERVAL_MS = 500;
 
 void stop_motors() {
   digitalWrite(IN1_FL, LOW); digitalWrite(IN2_FL, LOW);
@@ -176,9 +147,6 @@ void stop_motors() {
   
   analogWrite(ENA_FL, 0); analogWrite(ENA_RL, 0);
   analogWrite(ENB_FR, 0); analogWrite(ENB_RR, 0);
-
-  left_motor.target_velocity = 0.0;
-  right_motor.target_velocity = 0.0;
 }
 
 void cmd_vel_callback(const void * msgin) {
@@ -195,146 +163,58 @@ void cmd_vel_callback(const void * msgin) {
 
   if (stall_lockout) return; 
 
-  float left_speed = 0.0;
-  float right_speed = 0.0;
+  float left_speed, right_speed;
 
-  if (abs(current_cmd_linear) > 0.05 || abs(current_cmd_angular) > 0.05) {
+  if (abs(current_cmd_linear) > 0.05) {
       left_speed = current_cmd_linear - current_cmd_angular;
       right_speed = current_cmd_linear + current_cmd_angular;
+  } else if (abs(current_cmd_angular) > 2.0) {
+      left_speed = -current_cmd_angular;
+      right_speed = current_cmd_angular;
+  } else {
+      left_speed = 0.0;
+      right_speed = 0.0;
   }
 
-  left_motor.target_velocity = constrain(left_speed, -MAX_SPEED_CMD, MAX_SPEED_CMD);
-  right_motor.target_velocity = constrain(right_speed * 1.05, -MAX_SPEED_CMD, MAX_SPEED_CMD);
-}
+  left_speed = constrain(left_speed, -MAX_SPEED_CMD, MAX_SPEED_CMD);
+  right_speed = constrain(right_speed, -MAX_SPEED_CMD, MAX_SPEED_CMD);
 
-void pid_control_task(void * arg) {
-  TickType_t xLastWakeTime = xTaskGetTickCount();
-  const TickType_t xFrequency = pdMS_TO_TICKS(20); // 50Hz control loop
-  const float dt = 0.02; // 20ms
+  int left_pwm = 0;
+  int right_pwm = 0;
 
-  while(1) {
-    if (stall_lockout || (millis() - last_cmd_time > TIMEOUT_MS)) {
-        left_motor.slewed_velocity = 0.0;
-        right_motor.slewed_velocity = 0.0;
-        vTaskDelayUntil(&xLastWakeTime, xFrequency);
-        continue;
+  if (abs(left_speed) > DEADBAND) {
+    if (left_speed > 0) { 
+      digitalWrite(IN1_FL, HIGH); digitalWrite(IN2_FL, LOW);
+      digitalWrite(IN3_RL, HIGH); digitalWrite(IN4_RL, LOW);
+    } else { 
+      digitalWrite(IN1_FL, LOW); digitalWrite(IN2_FL, HIGH);
+      digitalWrite(IN3_RL, LOW); digitalWrite(IN4_RL, HIGH);
     }
-
-    // 1. ATOMICALLY READ ENCODERS (Prevents race conditions)
-    int32_t curr_FL, curr_RL, curr_FR, curr_RR;
-    portENTER_CRITICAL(&mux);
-    curr_FL = ticks_FL;
-    curr_RL = ticks_RL;
-    curr_FR = ticks_FR;
-    curr_RR = ticks_RR;
-    portEXIT_CRITICAL(&mux);
-
-    // 2. CALCULATE DELTAS
-    float d_FL = (float)(curr_FL - left_motor.prev_ticks_F);
-    float d_RL = (float)(curr_RL - left_motor.prev_ticks_R);
-    float d_FR = (float)(curr_FR - right_motor.prev_ticks_F);
-    float d_RR = (float)(curr_RR - right_motor.prev_ticks_R);
-
-    left_motor.prev_ticks_F = curr_FL;
-    left_motor.prev_ticks_R = curr_RL;
-    right_motor.prev_ticks_F = curr_FR;
-    right_motor.prev_ticks_R = curr_RR;
-
-    // 3. CALCULATE RAW MAGNITUDE SPEED
-    float speed_mag_left = (((d_FL + d_RL) / 2.0) * METERS_PER_TICK) / dt;
-    float speed_mag_right = (((d_FR + d_RR) / 2.0) * METERS_PER_TICK) / dt;
-
-    // 4. INFER DIRECTION (Using the sign of the *intended* velocity, not actual PWM)
-    float left_dir = (left_motor.slewed_velocity >= 0.0) ? 1.0 : -1.0;
-    float right_dir = (right_motor.slewed_velocity >= 0.0) ? 1.0 : -1.0;
-
-    left_motor.current_velocity = speed_mag_left * left_dir;
-    right_motor.current_velocity = speed_mag_right * right_dir;
-
-    MotorController* motors[] = {&left_motor, &right_motor};
-    int pwms[2] = {0, 0};
-
-    for (int i = 0; i < 2; i++) {
-        MotorController* m = motors[i];
-
-        // --- Trapezoidal Slew Rate Limiter ---
-        float max_step = m->max_accel * dt;
-        float diff = m->target_velocity - m->slewed_velocity;
-        
-        if (diff > max_step) {
-            m->slewed_velocity += max_step;
-        } else if (diff < -max_step) {
-            m->slewed_velocity -= max_step;
-        } else {
-            m->slewed_velocity = m->target_velocity;
-        }
-
-        // --- PID Error Calculation ---
-        float error = m->slewed_velocity - m->current_velocity;
-        m->integral += error * dt;
-        m->integral = constrain(m->integral, -50.0, 50.0); // Anti-windup
-        
-        // Derivative based on measurement to prevent derivative kick
-        float derivative = -(m->current_velocity - m->prev_velocity) / dt;
-        m->prev_velocity = m->current_velocity;
-        m->prev_error = error; // Kept for logic consistency, though unused directly for D
-
-        // --- Total Output (Safeguarded with Deadband) ---
-        float output = 0.0;
-
-        // Only calculate power if we are actually trying to move
-        if (fabs(m->slewed_velocity) > 0.01) {
-            float ff = m->slewed_velocity * m->K_v;
-            ff += (m->slewed_velocity > 0) ? m->K_s : -m->K_s;
-
-            output = ff + (m->K_p * error) + (m->K_i * m->integral) + (m->K_d * derivative);
-        } else {
-            m->integral = 0; // Prevent windup while stopped
-        }
-
-        pwms[i] = output;
-    }
-
-    // --- Apply Output (Left Chain) ---
-    if (pwms[0] >= 0) {
-        digitalWrite(IN1_FL, HIGH); digitalWrite(IN2_FL, LOW);
-        digitalWrite(IN3_RL, HIGH); digitalWrite(IN4_RL, LOW);
-    } else {
-        digitalWrite(IN1_FL, LOW); digitalWrite(IN2_FL, HIGH);
-        digitalWrite(IN3_RL, LOW); digitalWrite(IN4_RL, HIGH);
-    }
-    
-    int left_pwm_out = constrain(abs(pwms[0]), 0, 255);
-    
-    // Absolute halt deadband (Kill integral windup when stopped)
-    if (fabs(left_motor.slewed_velocity) < 0.01 && fabs(left_motor.target_velocity) < 0.01) {
-        left_pwm_out = 0; 
-        left_motor.integral = 0; 
-    }
-    analogWrite(ENA_FL, left_pwm_out);
-    analogWrite(ENA_RL, left_pwm_out);
-
-    // --- Apply Output (Right Chain) ---
-    if (pwms[1] >= 0) {
-        digitalWrite(IN1_FR, HIGH); digitalWrite(IN2_FR, LOW);
-        digitalWrite(IN3_RR, HIGH); digitalWrite(IN4_RR, LOW);
-    } else {
-        digitalWrite(IN1_FR, LOW); digitalWrite(IN2_FR, HIGH);
-        digitalWrite(IN3_RR, LOW); digitalWrite(IN4_RR, HIGH);
-    }
-    
-    int right_pwm_out = constrain(abs(pwms[1]), 0, 255);
-    
-    if (fabs(right_motor.slewed_velocity) < 0.01 && fabs(right_motor.target_velocity) < 0.01) {
-        right_pwm_out = 0;
-        right_motor.integral = 0;
-    }
-    analogWrite(ENB_FR, right_pwm_out);
-    analogWrite(ENB_RR, right_pwm_out);
-
-    Serial.printf("Target:%.2f Actual:%.2f\n", left_motor.slewed_velocity, left_motor.current_velocity);
-    vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    float normalized_speed = abs(left_speed) / MAX_SPEED_CMD;
+    left_pwm = constrain(MIN_PWM + (normalized_speed * (MAX_PWM - MIN_PWM)), MIN_PWM, MAX_PWM);
+  } else {
+    digitalWrite(IN1_FL, LOW); digitalWrite(IN2_FL, LOW);
+    digitalWrite(IN3_RL, LOW); digitalWrite(IN4_RL, LOW);
   }
+  analogWrite(ENA_FL, left_pwm);
+  analogWrite(ENA_RL, left_pwm);
+
+  if (abs(right_speed) > DEADBAND) {
+    if (right_speed > 0) { 
+      digitalWrite(IN1_FR, HIGH); digitalWrite(IN2_FR, LOW);
+      digitalWrite(IN3_RR, HIGH); digitalWrite(IN4_RR, LOW);
+    } else { 
+      digitalWrite(IN1_FR, LOW); digitalWrite(IN2_FR, HIGH);
+      digitalWrite(IN3_RR, LOW); digitalWrite(IN4_RR, HIGH);
+    }
+    float normalized_speed = abs(right_speed) / MAX_SPEED_CMD;
+    right_pwm = constrain(MIN_PWM + (normalized_speed * (MAX_PWM - MIN_PWM)), MIN_PWM, MAX_PWM);
+  } else {
+    digitalWrite(IN1_FR, LOW); digitalWrite(IN2_FR, LOW);
+    digitalWrite(IN3_RR, LOW); digitalWrite(IN4_RR, LOW);
+  }
+  analogWrite(ENB_FR, right_pwm);
+  analogWrite(ENB_RR, right_pwm);
 }
 
 bool agent_connected = false;
@@ -348,45 +228,54 @@ void micro_ros_task(void * arg) {
     if (agent_connected) {
         rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
         
+        // Trick the compiler by storing returns in a dummy variable
         rcl_ret_t dummy;
 
+        // Publish Encoders
         encoder_msg.data.data[0] = ticks_FL;
         encoder_msg.data.data[1] = ticks_RL;
         encoder_msg.data.data[2] = ticks_FR;
         encoder_msg.data.data[3] = ticks_RR;
         dummy = rcl_publish(&encoder_pub, &encoder_msg, NULL);
 
+        // Publish Status
         status_msg.data = current_rover_status;
         dummy = rcl_publish(&status_pub, &status_msg, NULL);
 
+        // Grab Shared Timestamp
         int64_t time_ns = rmw_uros_epoch_nanos();
         int32_t sec_stamp = (int32_t)(time_ns / 1000000000);
         uint32_t nano_stamp = (uint32_t)(time_ns % 1000000000);
 
+        // Read Sensor
         sensors_event_t a, g, temp_event;
         mpu.getEvent(&a, &g, &temp_event);
 
+        // --- Publish IMU Data ---
         imu_msg.header.frame_id.data = (char*)"imu_link";
         imu_msg.header.frame_id.size = strlen(imu_msg.header.frame_id.data);
         imu_msg.header.frame_id.capacity = imu_msg.header.frame_id.size + 1;
         imu_msg.header.stamp.sec = sec_stamp;
         imu_msg.header.stamp.nanosec = nano_stamp;
 
-        imu_msg.orientation_covariance[0] = 0.001; 
-        imu_msg.orientation_covariance[4] = 0.001; 
-        imu_msg.orientation_covariance[8] = 0.001; 
+        imu_msg.orientation_covariance[0] = 0.001; // Roll
+        imu_msg.orientation_covariance[4] = 0.001; // Pitch
+        imu_msg.orientation_covariance[8] = 0.001; // Yaw
 
+        // Angular Velocity Covariance (Gyroscope noise floor)
         imu_msg.angular_velocity_covariance[0] = 0.001; 
         imu_msg.angular_velocity_covariance[4] = 0.001; 
         imu_msg.angular_velocity_covariance[8] = 0.001; 
 
+        // Linear Acceleration Covariance (Accelerometer noise floor)
         imu_msg.linear_acceleration_covariance[0] = 0.05; 
         imu_msg.linear_acceleration_covariance[4] = 0.05; 
         imu_msg.linear_acceleration_covariance[8] = 0.05; 
 
+        // Apply calculated offsets
         imu_msg.linear_acceleration.x = a.acceleration.x - accel_x_offset;
         imu_msg.linear_acceleration.y = a.acceleration.y - accel_y_offset;
-        imu_msg.linear_acceleration.z = a.acceleration.z; 
+        imu_msg.linear_acceleration.z = a.acceleration.z; // Gravity left untouched
 
         imu_msg.angular_velocity.x = g.gyro.x - gyro_x_offset;
         imu_msg.angular_velocity.y = g.gyro.y - gyro_y_offset;
@@ -394,6 +283,7 @@ void micro_ros_task(void * arg) {
 
         dummy = rcl_publish(&imu_pub, &imu_msg, NULL);
 
+        // --- Publish Temperature Data ---
         temp_msg.header.frame_id.data = (char*)"imu_link";
         temp_msg.header.frame_id.size = strlen(temp_msg.header.frame_id.data);
         temp_msg.header.frame_id.capacity = temp_msg.header.frame_id.size + 1;
@@ -401,12 +291,14 @@ void micro_ros_task(void * arg) {
         temp_msg.header.stamp.nanosec = nano_stamp;
         
         temp_msg.temperature = temp_event.temperature;
-        temp_msg.variance = 0.0; 
+        temp_msg.variance = 0.0; // Variance unknown
 
         dummy = rcl_publish(&temp_pub, &temp_msg, NULL);
+
+        // Explicitly cast dummy to void to silence GCC
         (void)dummy;
     }
- 
+    
     if (millis() - last_ping_time > PING_INTERVAL_MS) {
       last_ping_time = millis();
       if (rmw_uros_ping_agent(50, 1) == RMW_RET_OK) {
@@ -466,7 +358,10 @@ void led_watchdog_task(void * arg) {
 
 /*
 void setup() {
+  // Initialize the serial port exactly at the baud rate the Pi Agent expects
   Serial.begin(115200);
+  
+  // Set up the Serial Transport BEFORE initializing the ROS nodes
   set_microros_serial_transports(Serial);
 
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
@@ -478,14 +373,14 @@ void setup() {
 
   Wire.begin(SDA_PIN, SCL_PIN);
   if (!mpu.begin(0x68, &Wire)) {
-    // MPU Init Failed
+    
   } else {
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setGyroRange(MPU6050_RANGE_500_DEG);
     mpu.setFilterBandwidth(MPU6050_BAND_21_HZ); 
   }
 
-  leds[0] = CRGB::Cyan; 
+  leds[0] = CRGB::Cyan; // Visual cue that calibration is running
   FastLED.show();
   
   int num_readings = 2000; 
@@ -545,6 +440,7 @@ void setup() {
   rclc_executor_init(&executor, &support.context, 1, &allocator);
   rclc_executor_add_subscription(&executor, &subscriber, &msg, &cmd_vel_callback, ON_NEW_DATA);
 
+  // --- SYNCHRONIZE TIME ---
   leds[0] = CRGB::Orange; 
   FastLED.show();
 
@@ -559,11 +455,9 @@ void setup() {
   FastLED.show();
 
   xTaskCreatePinnedToCore(micro_ros_task, "micro_ros_task", 4096, NULL, 1, NULL, 0);
-  xTaskCreatePinnedToCore(pid_control_task, "pid_task", 4096, NULL, 2, NULL, 1);
   xTaskCreatePinnedToCore(led_watchdog_task, "led_task", 2048, NULL, 1, NULL, 1);
   vTaskDelete(NULL);
 }
-
 */
 
 // WiFi setup
@@ -713,7 +607,6 @@ void setup() {
   FastLED.show();
 
   xTaskCreatePinnedToCore(micro_ros_task, "micro_ros_task", 4096, NULL, 1, NULL, 0);
-  xTaskCreatePinnedToCore(pid_control_task, "pid_task", 4096, NULL, 2, NULL, 1);
   xTaskCreatePinnedToCore(led_watchdog_task, "led_task", 2048, NULL, 1, NULL, 1);
   vTaskDelete(NULL);
 }
