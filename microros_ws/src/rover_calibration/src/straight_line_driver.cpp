@@ -8,12 +8,12 @@ class StraightLineDriver : public rclcpp::Node {
 public:
     StraightLineDriver() : Node("straight_line_driver"), state_(WAITING_FOR_ODOM), v_cmd_(0.0), pose_initialized_(false), stuck_cycles_(0) {
         // --- Parameters ---
-        this->declare_parameter("target_distance", 1.0);       // Meters
-        this->declare_parameter("max_velocity", 0.2);          // m/s
-        this->declare_parameter("max_acceleration", 0.15);     // m/s^2
-        this->declare_parameter("kp_yaw", 1.5);                // P-Gain for heading correction
-        this->declare_parameter("tolerance", 0.005);           // 5mm stop tolerance
-        this->declare_parameter("min_sustainable_vel", 0.08);  // Hardware stall floor (m/s)
+        this->declare_parameter("target_distance", 1.0);       
+        this->declare_parameter("max_velocity", 0.2);          
+        this->declare_parameter("max_acceleration", 0.15);     
+        this->declare_parameter("kp_yaw", 1.5);                
+        this->declare_parameter("tolerance", 0.005);           
+        this->declare_parameter("min_sustainable_vel", 0.08);  
 
         target_distance_ = this->get_parameter("target_distance").as_double();
         max_vel_ = this->get_parameter("max_velocity").as_double();
@@ -24,11 +24,9 @@ public:
 
         cmd_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
         
-        // Subscribe to the EKF filtered odometry for high precision
         odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
             "odometry/filtered", 10, std::bind(&StraightLineDriver::odom_callback, this, std::placeholders::_1));
 
-        // 50Hz Control Loop
         dt_ = 0.02; 
         timer_ = this->create_wall_timer(
             std::chrono::milliseconds(static_cast<int>(dt_ * 1000)),
@@ -53,14 +51,12 @@ private:
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::TimerBase::SharedPtr timer_;
 
-    // Helper: Convert Quaternion to Euler Yaw
     double euler_from_quaternion(double x, double y, double z, double w) {
         double siny_cosp = 2.0 * (w * z + x * y);
         double cosy_cosp = 1.0 - 2.0 * (y * y + z * z);
         return std::atan2(siny_cosp, cosy_cosp);
     }
 
-    // Helper: Keep angles within -PI to PI
     double normalize_angle(double angle) {
         while (angle > M_PI) angle -= 2.0 * M_PI;
         while (angle < -M_PI) angle += 2.0 * M_PI;
@@ -81,7 +77,16 @@ private:
     }
 
     void control_loop() {
-        if (state_ == WAITING_FOR_ODOM || state_ == DONE) return;
+        if (state_ == WAITING_FOR_ODOM) return;
+
+        // Ensure we cleanly hold the 0 state without killing the node asynchronously 
+        if (state_ == DONE) {
+            geometry_msgs::msg::Twist stop_msg;
+            stop_msg.linear.x = 0.0;
+            stop_msg.angular.z = 0.0;
+            cmd_pub_->publish(stop_msg);
+            return;
+        }
 
         if (state_ == INIT) {
             start_x_ = current_x_;
@@ -99,46 +104,44 @@ private:
 
             // 1. Check for Perfect Stop Condition
             if (distance_remaining <= tolerance_) {
-                msg.linear.x = 0.0;
-                msg.angular.z = 0.0;
-                cmd_pub_->publish(msg);
                 state_ = DONE;
-                RCLCPP_INFO(this->get_logger(), "Target perfectly reached. Traveled: %.4fm. Shutting down.", distance_traveled);
-                rclcpp::shutdown();
+                RCLCPP_INFO(this->get_logger(), "Target perfectly reached. Traveled: %.4fm. (Press Ctrl+C to exit)", distance_traveled);
                 return;
             }
 
-            // 2. Kinematic Velocity Profiling (Trapezoidal / S-Curve approximation)
+            // 2. Kinematic Velocity Profiling 
             double v_max_kinematic = std::sqrt(2.0 * max_accel_ * std::max(0.0, distance_remaining));
             double v_target_accel = v_cmd_ + max_accel_ * dt_;
             
-            // Calculate the ideal kinematic speed
             double v_ideal = std::min({max_vel_, v_target_accel, v_max_kinematic});
             v_ideal = std::max(v_ideal, 0.0); 
 
-            // 3. Hardware Cutoff & Settling Watchdog
+            // --- FIX: Jump-start acceleration to overcome static friction ---
+            if (v_ideal > 0.0 && v_ideal < min_sustainable_vel_ && v_max_kinematic >= min_sustainable_vel_) {
+                v_ideal = min_sustainable_vel_;
+            }
+
+            // 3. Hardware Cutoff & Settling Watchdog (Now only triggers on deceleration phase)
             if (v_ideal < min_sustainable_vel_) {
                 v_cmd_ = 0.0; // Cut power, let momentum coast it in
                 stuck_cycles_++;
                 
-                // If it has been coasting/stopped for 1 full second (50 cycles)
                 if (stuck_cycles_ > 50) {
-                    RCLCPP_WARN(this->get_logger(), "Settled short at %.3fm due to friction. Terminating cleanly.", distance_traveled);
+                    RCLCPP_WARN(this->get_logger(), "Settled short at %.3fm due to friction. Terminating.", distance_traveled);
                     state_ = DONE;
-                    msg.linear.x = 0.0;
-                    msg.angular.z = 0.0;
-                    cmd_pub_->publish(msg);
-                    rclcpp::shutdown();
                     return;
                 }
             } else {
                 v_cmd_ = v_ideal;
-                stuck_cycles_ = 0; // Reset watchdog as long as we are driving normally
+                stuck_cycles_ = 0; 
             }
 
             // 4. Active Heading Correction
             double yaw_error = normalize_angle(start_yaw_ - current_yaw_);
             double angular_cmd = kp_yaw_ * yaw_error;
+            
+            // --- FIX: Clamp extreme angular corrections to prevent violent spins ---
+            angular_cmd = std::clamp(angular_cmd, -1.0, 1.0); 
 
             // 5. Publish Command
             msg.linear.x = v_cmd_;
