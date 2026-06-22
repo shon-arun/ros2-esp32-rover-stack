@@ -5,6 +5,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <cmath>
+#include <deque> // Added for the Moving Average Filter
 
 class TickToOdom : public rclcpp::Node
 {
@@ -17,7 +18,7 @@ public:
         // --- HARDCODED CHASSIS CONSTANTS ---
         wheel_radius_ = 0.0325; // 65mm standard yellow wheel
         track_width_ = 0.20;    // ~20cm track width for acrylic kit
-        ticks_per_rev_ = 20.0; // 20 slots
+        ticks_per_rev_ = 20.0;  // 20 slots
 
         odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>("odom", 10);
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
@@ -26,7 +27,7 @@ public:
             "/wheel_ticks", rclcpp::SensorDataQoS(),
             std::bind(&TickToOdom::tick_callback, this, std::placeholders::_1));
 
-        RCLCPP_INFO(this->get_logger(), "C++ Tick-to-Odometry Node Initialized.");
+        RCLCPP_INFO(this->get_logger(), "C++ Tick-to-Odometry Node Initialized with Moving Average Filter.");
     }
 
 private:
@@ -74,6 +75,29 @@ private:
             return; 
         }
 
+        // --- NEW: Calculate raw velocities and apply Moving Average Filter ---
+        double raw_v_x = d_center / dt;
+        double raw_v_z = d_theta / dt;
+
+        vel_x_history_.push_back(raw_v_x);
+        vel_z_history_.push_back(raw_v_z);
+
+        // Maintain the sliding window size
+        if (vel_x_history_.size() > filter_window_size_) {
+            vel_x_history_.pop_front();
+            vel_z_history_.pop_front();
+        }
+
+        // Compute the averages
+        double filtered_v_x = 0.0;
+        double filtered_v_z = 0.0;
+        for (double v : vel_x_history_) filtered_v_x += v;
+        for (double v : vel_z_history_) filtered_v_z += v;
+        
+        filtered_v_x /= vel_x_history_.size();
+        filtered_v_z /= vel_z_history_.size();
+        // -------------------------------------------------------------------
+
         // 7. Publish TF Transform (odom -> base_link)
         geometry_msgs::msg::TransformStamped t;
         t.header.stamp = now;
@@ -102,18 +126,20 @@ private:
         odom.pose.pose.position.z = 0.0;
         odom.pose.pose.orientation = t.transform.rotation;
 
-        // Pose covariance
+        // Pose covariance 
         odom.pose.covariance[0] = 0.1;
         odom.pose.covariance[7] = 0.1;
         odom.pose.covariance[35] = 0.1;
 
-        // Twist Covariance (Loosened Anchor)
-        odom.twist.covariance[0] = 0.5;  // Linear X velocity variance
-        odom.twist.covariance[35] = 0.5; // Angular Z velocity variance
+        // --- UPDATED: Twist Covariance (Tightened Anchor) ---
+        // Reduced from 0.5 to 0.01 because the moving average filter provides 
+        // a much cleaner and more reliable velocity signal to the EKF.
+        odom.twist.covariance[0] = 0.01;  // Linear X velocity variance
+        odom.twist.covariance[35] = 0.01; // Angular Z velocity variance
 
-        // Twist (Velocity) - Now calculated dynamically based on real ROS 2 system time
-        odom.twist.twist.linear.x = d_center / dt;
-        odom.twist.twist.angular.z = d_theta / dt;
+        // Twist (Velocity) - Now utilizing the filtered variables
+        odom.twist.twist.linear.x = filtered_v_x;
+        odom.twist.twist.angular.z = filtered_v_z;
 
         odom_pub_->publish(odom);
 
@@ -133,6 +159,11 @@ private:
     
     // Time tracking variable
     rclcpp::Time last_time_;
+
+    // --- NEW: Moving Average Filter variables ---
+    std::deque<double> vel_x_history_;
+    std::deque<double> vel_z_history_;
+    const size_t filter_window_size_ = 5; // A window of 5 reads provides good smoothing without too much lag
 
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
