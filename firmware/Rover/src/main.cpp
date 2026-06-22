@@ -52,6 +52,12 @@ volatile int32_t ticks_RL = 0;
 volatile int32_t ticks_FR = 0;
 volatile int32_t ticks_RR = 0;
 
+// --- NEW: Signed ticks accumulated for ROS Odometry ---
+int32_t ros_ticks_FL = 0;
+int32_t ros_ticks_RL = 0;
+int32_t ros_ticks_FR = 0;
+int32_t ros_ticks_RR = 0;
+
 // Volatile variables for hardware interrupts (Debounce Timestamps)
 volatile unsigned long last_tick_FL = 0;
 volatile unsigned long last_tick_RL = 0;
@@ -232,11 +238,16 @@ void pid_control_task(void * arg) {
     curr_RR = ticks_RR;
     portEXIT_CRITICAL(&mux);
 
-    // 2. CALCULATE DELTAS
-    float d_FL = (float)(curr_FL - left_motor.prev_ticks_F);
-    float d_RL = (float)(curr_RL - left_motor.prev_ticks_R);
-    float d_FR = (float)(curr_FR - right_motor.prev_ticks_F);
-    float d_RR = (float)(curr_RR - right_motor.prev_ticks_R);
+    // 2. CALCULATE RAW DELTAS
+    int32_t raw_d_FL = curr_FL - left_motor.prev_ticks_F;
+    int32_t raw_d_RL = curr_RL - left_motor.prev_ticks_R;
+    int32_t raw_d_FR = curr_FR - right_motor.prev_ticks_F;
+    int32_t raw_d_RR = curr_RR - right_motor.prev_ticks_R;
+
+    float d_FL = (float)raw_d_FL;
+    float d_RL = (float)raw_d_RL;
+    float d_FR = (float)raw_d_FR;
+    float d_RR = (float)raw_d_RR;
 
     left_motor.prev_ticks_F = curr_FL;
     left_motor.prev_ticks_R = curr_RL;
@@ -253,6 +264,12 @@ void pid_control_task(void * arg) {
 
     left_motor.current_velocity = speed_mag_left * left_dir;
     right_motor.current_velocity = speed_mag_right * right_dir;
+
+    // --- NEW: Accumulate signed ticks for ROS ---
+    ros_ticks_FL += raw_d_FL * (int32_t)left_dir;
+    ros_ticks_RL += raw_d_RL * (int32_t)left_dir;
+    ros_ticks_FR += raw_d_FR * (int32_t)right_dir;
+    ros_ticks_RR += raw_d_RR * (int32_t)right_dir;
 
     MotorController* motors[] = {&left_motor, &right_motor};
     int pwms[2] = {0, 0};
@@ -353,10 +370,10 @@ void micro_ros_task(void * arg) {
         
         rcl_ret_t dummy;
 
-        encoder_msg.data.data[0] = ticks_FL;
-        encoder_msg.data.data[1] = ticks_RL;
-        encoder_msg.data.data[2] = ticks_FR;
-        encoder_msg.data.data[3] = ticks_RR;
+        encoder_msg.data.data[0] = ros_ticks_FL;
+        encoder_msg.data.data[1] = ros_ticks_RL;
+        encoder_msg.data.data[2] = ros_ticks_FR;
+        encoder_msg.data.data[3] = ros_ticks_RR;
         dummy = rcl_publish(&encoder_pub, &encoder_msg, NULL);
 
         status_msg.data = current_rover_status;
