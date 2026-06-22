@@ -135,7 +135,7 @@ private:
         // Reduced from 0.5 to 0.01 because the moving average filter provides 
         // a much cleaner and more reliable velocity signal to the EKF.
         odom.twist.covariance[0] = 0.01;  // Linear X velocity variance
-        odom.twist.covariance[35] = 0.01; // Angular Z velocity variance
+        odom.twist.covariance[35] = 0.5; // Angular Z velocity variance
 
         // Twist (Velocity) - Now utilizing the filtered variables
         odom.twist.twist.linear.x = filtered_v_x;
