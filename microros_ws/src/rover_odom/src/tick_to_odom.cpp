@@ -11,6 +11,9 @@ class TickToOdom : public rclcpp::Node
 public:
     TickToOdom() : Node("tick_to_odom"), x_(0.0), y_(0.0), th_(0.0), first_reading_(true)
     {
+        // Initialize the time tracker
+        last_time_ = this->get_clock()->now();
+
         // --- HARDCODED CHASSIS CONSTANTS ---
         wheel_radius_ = 0.0325; // 65mm standard yellow wheel
         track_width_ = 0.20;    // ~20cm track width for acrylic kit
@@ -38,6 +41,7 @@ private:
         if (first_reading_) {
             last_ticks_left_ = current_left;
             last_ticks_right_ = current_right;
+            last_time_ = this->get_clock()->now(); // Reset time on the first valid read
             first_reading_ = false;
             return;
         }
@@ -60,9 +64,17 @@ private:
         y_ += d_center * sin(th_ + (d_theta / 2.0));
         th_ += d_theta;
 
-        // 6. Publish TF Transform (odom -> base_link)
+        // 6. Calculate Dynamic Time Delta (dt)
         rclcpp::Time now = this->get_clock()->now();
+        double dt = (now - last_time_).seconds();
 
+        // Prevent division by zero if messages arrive with identical timestamps
+        if (dt <= 0.0) {
+            last_time_ = now;
+            return; 
+        }
+
+        // 7. Publish TF Transform (odom -> base_link)
         geometry_msgs::msg::TransformStamped t;
         t.header.stamp = now;
         t.header.frame_id = "odom";
@@ -80,7 +92,7 @@ private:
 
         tf_broadcaster_->sendTransform(t);
 
-        // 7. Publish Odometry Message
+        // 8. Publish Odometry Message
         nav_msgs::msg::Odometry odom;
         odom.header.stamp = now;
         odom.header.frame_id = "odom";
@@ -99,16 +111,16 @@ private:
         odom.twist.covariance[0] = 0.5;  // Linear X velocity variance
         odom.twist.covariance[35] = 0.5; // Angular Z velocity variance
 
-        // Twist (Velocity) - Assuming ~26Hz from ESP32
-        double dt = 1.0 / 26.0;
+        // Twist (Velocity) - Now calculated dynamically based on real ROS 2 system time
         odom.twist.twist.linear.x = d_center / dt;
         odom.twist.twist.angular.z = d_theta / dt;
 
         odom_pub_->publish(odom);
 
-        // 8. Update state
+        // 9. Update state for the next loop
         last_ticks_left_ = current_left;
         last_ticks_right_ = current_right;
+        last_time_ = now;
     }
 
     double wheel_radius_;
@@ -118,6 +130,9 @@ private:
     double x_, y_, th_;
     double last_ticks_left_, last_ticks_right_;
     bool first_reading_;
+    
+    // Time tracking variable
+    rclcpp::Time last_time_;
 
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
