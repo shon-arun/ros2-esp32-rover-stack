@@ -6,13 +6,13 @@
 
 class StraightLineDriver : public rclcpp::Node {
 public:
-    StraightLineDriver() : Node("straight_line_driver"), state_(WAITING_FOR_ODOM), v_cmd_(0.0), pose_initialized_(false), stuck_cycles_(0) {
+    StraightLineDriver() : Node("straight_line_driver"), state_(WAITING_FOR_ODOM), v_cmd_(0.0), pose_initialized_(false) {
         // --- Parameters ---
         this->declare_parameter("target_distance", 1.0);       
         this->declare_parameter("max_velocity", 0.2);          
         this->declare_parameter("max_acceleration", 0.15);     
         this->declare_parameter("kp_yaw", 1.5);                
-        this->declare_parameter("max_angular_velocity", 1.0); // <-- Added parameter for safety clamping
+        this->declare_parameter("max_angular_velocity", 1.0); 
         this->declare_parameter("tolerance", 0.005);           
         this->declare_parameter("min_sustainable_vel", 0.08);  
 
@@ -41,7 +41,6 @@ private:
     enum State { WAITING_FOR_ODOM, INIT, DRIVING, DONE };
     State state_;
     bool pose_initialized_;
-    int stuck_cycles_;
 
     double current_x_, current_y_, current_yaw_;
     double start_x_, start_y_, start_yaw_;
@@ -106,61 +105,51 @@ private:
             double dx = current_x_ - start_x_;
             double dy = current_y_ - start_y_;
             
-            // --- FIX: Project current position onto the initial heading vector ---
-            // This ignores any lateral drift and only counts forward/backward progress.
+            // Project current position onto the initial heading vector. 
+            // Negative values naturally occur if moving backward.
             double distance_traveled = (dx * std::cos(start_yaw_)) + (dy * std::sin(start_yaw_));
-
-            // --- FIX: Support driving backwards (negative target distance) ---
             double direction = (target_distance_ >= 0.0) ? 1.0 : -1.0;
-            double abs_target = std::abs(target_distance_);
-            double abs_traveled = std::abs(distance_traveled);
-            double distance_remaining = abs_target - abs_traveled;
 
-            geometry_msgs::msg::Twist msg;
+            // [FIX 1 & 2] Robust Directional Line-Crossing Check
+            bool reached_target = false;
+            if (target_distance_ >= 0.0) {
+                reached_target = (distance_traveled >= target_distance_ - tolerance_);
+            } else {
+                reached_target = (distance_traveled <= target_distance_ + tolerance_);
+            }
 
-            // 1. Check for Perfect Stop Condition
-            if (distance_remaining <= tolerance_) {
+            if (reached_target) {
                 state_ = DONE;
                 RCLCPP_INFO(this->get_logger(), "Target perfectly reached. Traveled: %.4fm. Shutting down.", distance_traveled);
                 return;
             }
 
-            // 2. Kinematic Velocity Profiling 
-            double v_max_kinematic = std::sqrt(2.0 * max_accel_ * std::max(0.0, distance_remaining));
+            // [FIX 3] True Distance Remaining calculation (avoids absolute value shrinkage)
+            double distance_remaining = std::abs(target_distance_ - distance_traveled);
+
+            // Kinematic Velocity Profiling 
+            double v_max_kinematic = std::sqrt(2.0 * max_accel_ * distance_remaining);
             double v_target_accel = v_cmd_ + max_accel_ * dt_;
             
             double v_ideal = std::min({max_vel_, v_target_accel, v_max_kinematic});
-            v_ideal = std::max(v_ideal, 0.0); 
+            
+            // [FIX 4] Maintain minimum sustainable speed until the target line is physically crossed. 
+            // Removes the broken coasting/stall logic.
+            v_ideal = std::max(v_ideal, min_sustainable_vel_);
+            v_ideal = std::min(v_ideal, max_vel_); // Safety constraint just in case parameters are misconfigured
 
-            // --- FIX: Jump-start acceleration to overcome static friction ---
-            if (v_ideal > 0.0 && v_ideal < min_sustainable_vel_ && v_max_kinematic >= min_sustainable_vel_) {
-                v_ideal = min_sustainable_vel_;
-            }
+            v_cmd_ = v_ideal;
 
-            // 3. Hardware Cutoff & Settling Watchdog (Triggers on deceleration phase)
-            if (v_ideal < min_sustainable_vel_) {
-                v_cmd_ = 0.0; // Cut power, let momentum coast it in
-                stuck_cycles_++;
-                
-                if (stuck_cycles_ > 50) {
-                    RCLCPP_WARN(this->get_logger(), "Settled short at %.3fm due to friction. Terminating.", distance_traveled);
-                    state_ = DONE;
-                    return;
-                }
-            } else {
-                v_cmd_ = v_ideal;
-                stuck_cycles_ = 0; 
-            }
-
-            // 4. Active Heading Correction
+            // Active Heading Correction
             double yaw_error = normalize_angle(start_yaw_ - current_yaw_);
             double angular_cmd = kp_yaw_ * yaw_error;
             
-            // --- FIX: Clamp extreme angular corrections based on the ROS parameter ---
+            // Clamp extreme angular corrections
             angular_cmd = std::clamp(angular_cmd, -max_angular_velocity_, max_angular_velocity_); 
 
-            // 5. Publish Command
-            msg.linear.x = v_cmd_ * direction; // Apply direction multiplier here
+            // Publish Command
+            geometry_msgs::msg::Twist msg;
+            msg.linear.x = v_cmd_ * direction; 
             msg.angular.z = angular_cmd;
             cmd_pub_->publish(msg);
         }
