@@ -12,6 +12,7 @@ public:
         this->declare_parameter("max_velocity", 0.2);          
         this->declare_parameter("max_acceleration", 0.15);     
         this->declare_parameter("kp_yaw", 1.5);                
+        this->declare_parameter("max_angular_velocity", 1.0); // <-- Added parameter for safety clamping
         this->declare_parameter("tolerance", 0.005);           
         this->declare_parameter("min_sustainable_vel", 0.08);  
 
@@ -19,6 +20,7 @@ public:
         max_vel_ = this->get_parameter("max_velocity").as_double();
         max_accel_ = this->get_parameter("max_acceleration").as_double();
         kp_yaw_ = this->get_parameter("kp_yaw").as_double();
+        max_angular_velocity_ = this->get_parameter("max_angular_velocity").as_double();
         tolerance_ = this->get_parameter("tolerance").as_double();
         min_sustainable_vel_ = this->get_parameter("min_sustainable_vel").as_double();
 
@@ -45,7 +47,7 @@ private:
     double start_x_, start_y_, start_yaw_;
     double v_cmd_;
 
-    double target_distance_, max_vel_, max_accel_, kp_yaw_, tolerance_, min_sustainable_vel_, dt_;
+    double target_distance_, max_vel_, max_accel_, kp_yaw_, max_angular_velocity_, tolerance_, min_sustainable_vel_, dt_;
 
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_pub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
@@ -79,12 +81,16 @@ private:
     void control_loop() {
         if (state_ == WAITING_FOR_ODOM) return;
 
-        // Ensure we cleanly hold the 0 state without killing the node asynchronously 
+        // Ensure we cleanly hold the 0 state and gracefully shut down the node
         if (state_ == DONE) {
             geometry_msgs::msg::Twist stop_msg;
             stop_msg.linear.x = 0.0;
             stop_msg.angular.z = 0.0;
             cmd_pub_->publish(stop_msg);
+            
+            // Provide enough time for the ROS network to transmit the stop message
+            rclcpp::sleep_for(std::chrono::milliseconds(100));
+            rclcpp::shutdown();
             return;
         }
 
@@ -97,15 +103,25 @@ private:
         }
 
         if (state_ == DRIVING) {
-            double distance_traveled = std::hypot(current_x_ - start_x_, current_y_ - start_y_);
-            double distance_remaining = target_distance_ - distance_traveled;
+            double dx = current_x_ - start_x_;
+            double dy = current_y_ - start_y_;
+            
+            // --- FIX: Project current position onto the initial heading vector ---
+            // This ignores any lateral drift and only counts forward/backward progress.
+            double distance_traveled = (dx * std::cos(start_yaw_)) + (dy * std::sin(start_yaw_));
+
+            // --- FIX: Support driving backwards (negative target distance) ---
+            double direction = (target_distance_ >= 0.0) ? 1.0 : -1.0;
+            double abs_target = std::abs(target_distance_);
+            double abs_traveled = std::abs(distance_traveled);
+            double distance_remaining = abs_target - abs_traveled;
 
             geometry_msgs::msg::Twist msg;
 
             // 1. Check for Perfect Stop Condition
             if (distance_remaining <= tolerance_) {
                 state_ = DONE;
-                RCLCPP_INFO(this->get_logger(), "Target perfectly reached. Traveled: %.4fm. (Press Ctrl+C to exit)", distance_traveled);
+                RCLCPP_INFO(this->get_logger(), "Target perfectly reached. Traveled: %.4fm. Shutting down.", distance_traveled);
                 return;
             }
 
@@ -121,7 +137,7 @@ private:
                 v_ideal = min_sustainable_vel_;
             }
 
-            // 3. Hardware Cutoff & Settling Watchdog (Now only triggers on deceleration phase)
+            // 3. Hardware Cutoff & Settling Watchdog (Triggers on deceleration phase)
             if (v_ideal < min_sustainable_vel_) {
                 v_cmd_ = 0.0; // Cut power, let momentum coast it in
                 stuck_cycles_++;
@@ -140,11 +156,11 @@ private:
             double yaw_error = normalize_angle(start_yaw_ - current_yaw_);
             double angular_cmd = kp_yaw_ * yaw_error;
             
-            // --- FIX: Clamp extreme angular corrections to prevent violent spins ---
-            angular_cmd = std::clamp(angular_cmd, -1.0, 1.0); 
+            // --- FIX: Clamp extreme angular corrections based on the ROS parameter ---
+            angular_cmd = std::clamp(angular_cmd, -max_angular_velocity_, max_angular_velocity_); 
 
             // 5. Publish Command
-            msg.linear.x = v_cmd_;
+            msg.linear.x = v_cmd_ * direction; // Apply direction multiplier here
             msg.angular.z = angular_cmd;
             cmd_pub_->publish(msg);
         }
