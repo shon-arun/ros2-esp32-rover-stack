@@ -5,14 +5,13 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <cmath>
-#include <deque> // Added for the Moving Average Filter
+#include <deque>
 
 class TickToOdom : public rclcpp::Node
 {
 public:
     TickToOdom() : Node("tick_to_odom"), x_(0.0), y_(0.0), th_(0.0), first_reading_(true)
     {
-        // Initialize the time tracker
         last_time_ = this->get_clock()->now();
 
         // --- HARDCODED CHASSIS CONSTANTS ---
@@ -21,6 +20,9 @@ public:
         ticks_per_rev_ = 20.0;  // 20 slots
 
         odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>("odom", 10);
+        
+        // Note: If you use robot_localization (ekf.yaml) with publish_tf: true, 
+        // you might want to remove this TF broadcaster to avoid conflicts.
         tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
         tick_sub_ = this->create_subscription<std_msgs::msg::Int32MultiArray>(
@@ -35,26 +37,32 @@ private:
     {
         if (msg->data.size() < 4) return;
 
-        // 1. Extract and Average the Skid-Steer Encoders [FL, RL, FR, RR]
-        double current_left = (msg->data[0] + msg->data[1]) / 2.0;
-        double current_right = (msg->data[2] + msg->data[3]) / 2.0;
-
         if (first_reading_) {
-            last_ticks_left_ = current_left;
-            last_ticks_right_ = current_right;
-            last_time_ = this->get_clock()->now(); // Reset time on the first valid read
+            last_ticks_FL_ = msg->data[0];
+            last_ticks_RL_ = msg->data[1];
+            last_ticks_FR_ = msg->data[2];
+            last_ticks_RR_ = msg->data[3];
+            last_time_ = this->get_clock()->now();
             first_reading_ = false;
             return;
         }
 
-        // 2. Calculate Delta Ticks
-        double delta_left = current_left - last_ticks_left_;
-        double delta_right = current_right - last_ticks_right_;
+        // 1. Calculate Delta Ticks for each independent wheel
+        double delta_FL = msg->data[0] - last_ticks_FL_;
+        double delta_RL = msg->data[1] - last_ticks_RL_;
+        double delta_FR = msg->data[2] - last_ticks_FR_;
+        double delta_RR = msg->data[3] - last_ticks_RR_;
 
-        // 3. Convert Ticks to Distance (Meters)
+        // 2. Convert Ticks to Physical Distance (Meters)
         double dist_per_tick = (2.0 * M_PI * wheel_radius_) / ticks_per_rev_;
-        double d_left = delta_left * dist_per_tick;
-        double d_right = delta_right * dist_per_tick;
+        double d_FL = delta_FL * dist_per_tick;
+        double d_RL = delta_RL * dist_per_tick;
+        double d_FR = delta_FR * dist_per_tick;
+        double d_RR = delta_RR * dist_per_tick;
+
+        // 3. Average the physical distances for the left and right sides
+        double d_left = (d_FL + d_RL) / 2.0;
+        double d_right = (d_FR + d_RR) / 2.0;
 
         // 4. Calculate Center Translation and Rotation
         double d_center = (d_left + d_right) / 2.0;
@@ -69,7 +77,6 @@ private:
         rclcpp::Time now = this->get_clock()->now();
         double dt = (now - last_time_).seconds();
 
-        // Prevent division by zero if messages arrive with identical timestamps
         if (dt <= 0.0) {
             last_time_ = now;
             return; 
@@ -82,13 +89,11 @@ private:
         vel_x_history_.push_back(raw_v_x);
         vel_z_history_.push_back(raw_v_z);
 
-        // Maintain the sliding window size
         if (vel_x_history_.size() > filter_window_size_) {
             vel_x_history_.pop_front();
             vel_z_history_.pop_front();
         }
 
-        // Compute the averages
         double filtered_v_x = 0.0;
         double filtered_v_z = 0.0;
         for (double v : vel_x_history_) filtered_v_x += v;
@@ -96,7 +101,6 @@ private:
         
         filtered_v_x /= vel_x_history_.size();
         filtered_v_z /= vel_z_history_.size();
-        // -------------------------------------------------------------------
 
         // 7. Publish TF Transform (odom -> base_link)
         geometry_msgs::msg::TransformStamped t;
@@ -114,7 +118,7 @@ private:
         t.transform.rotation.z = q.z();
         t.transform.rotation.w = q.w();
 
-        tf_broadcaster_->sendTransform(t);
+        // tf_broadcaster_->sendTransform(t);
 
         // 8. Publish Odometry Message
         nav_msgs::msg::Odometry odom;
@@ -126,26 +130,23 @@ private:
         odom.pose.pose.position.z = 0.0;
         odom.pose.pose.orientation = t.transform.rotation;
 
-        // Pose covariance 
         odom.pose.covariance[0] = 0.1;
         odom.pose.covariance[7] = 0.1;
         odom.pose.covariance[35] = 0.1;
 
-        // --- UPDATED: Twist Covariance (Tightened Anchor) ---
-        // Reduced from 0.5 to 0.01 because the moving average filter provides 
-        // a much cleaner and more reliable velocity signal to the EKF.
-        odom.twist.covariance[0] = 0.01;  // Linear X velocity variance
-        odom.twist.covariance[35] = 0.5; // Angular Z velocity variance
+        odom.twist.covariance[0] = 0.01;  
+        odom.twist.covariance[35] = 0.5; 
 
-        // Twist (Velocity) - Now utilizing the filtered variables
         odom.twist.twist.linear.x = filtered_v_x;
         odom.twist.twist.angular.z = filtered_v_z;
 
         odom_pub_->publish(odom);
 
         // 9. Update state for the next loop
-        last_ticks_left_ = current_left;
-        last_ticks_right_ = current_right;
+        last_ticks_FL_ = msg->data[0];
+        last_ticks_RL_ = msg->data[1];
+        last_ticks_FR_ = msg->data[2];
+        last_ticks_RR_ = msg->data[3];
         last_time_ = now;
     }
 
@@ -154,16 +155,17 @@ private:
     double ticks_per_rev_;
 
     double x_, y_, th_;
-    double last_ticks_left_, last_ticks_right_;
-    bool first_reading_;
     
-    // Time tracking variable
+    // Fixed: Track all 4 wheels independently 
+    double last_ticks_FL_, last_ticks_RL_;
+    double last_ticks_FR_, last_ticks_RR_;
+    
+    bool first_reading_;
     rclcpp::Time last_time_;
 
-    // --- NEW: Moving Average Filter variables ---
     std::deque<double> vel_x_history_;
     std::deque<double> vel_z_history_;
-    const size_t filter_window_size_ = 5; // A window of 5 reads provides good smoothing without too much lag
+    const size_t filter_window_size_ = 5; 
 
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
