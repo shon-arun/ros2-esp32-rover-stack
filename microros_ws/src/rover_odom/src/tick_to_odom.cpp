@@ -119,9 +119,11 @@ private:
         odom.pose.covariance[35] = 0.1;
 
         odom.twist.covariance[0] = 0.01;
+        odom.twist.covariance[7] = 1e-9;
         odom.twist.covariance[35] = 0.5;
 
         odom.twist.twist.linear.x = filtered_v_x;
+        odom.twist.twist.linear.y = 0.0;
         odom.twist.twist.angular.z = filtered_v_z;
 
         odom_pub_->publish(odom);
