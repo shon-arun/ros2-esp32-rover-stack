@@ -64,7 +64,7 @@ volatile unsigned long last_tick_RL = 0;
 volatile unsigned long last_tick_FR = 0;
 volatile unsigned long last_tick_RR = 0;
 
-const unsigned long DEBOUNCE_DELAY_US = 2500; 
+const unsigned long DEBOUNCE_DELAY_US = 8000; 
 
 void IRAM_ATTR isr_FL() { 
   unsigned long current_time = micros(); 
