@@ -131,8 +131,8 @@ typedef struct {
 
 // Initialize memory states with baseline tuning parameters
 // target, slewed, current, prev_vel, prev_ticks_F, prev_ticks_R, prev_error, integral, K_v, K_s, K_p, K_i, K_d, max_accel
-MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 115.0, 400.0, 20.0, 0.0, 1.5};
-MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 125.0, 400.0, 20.0, 0.0, 1.5};
+MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 115.0, 500.0, 30.0, 0.0, 1.5};
+MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 125.0, 500.0, 30.0, 0.0, 1.5};
 
 // MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 30.0, 98.0, 600.0, 0.0, 0.0, 1.5};
 // MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 30.0, 98.0, 600.0, 0.0, 0.0, 1.5};
@@ -213,7 +213,7 @@ void cmd_vel_callback(const void * msgin) {
   }
 
   left_motor.target_velocity = constrain(left_speed, -MAX_SPEED_CMD, MAX_SPEED_CMD);
-  right_motor.target_velocity = constrain(right_speed * 1.05, -MAX_SPEED_CMD, MAX_SPEED_CMD);
+  right_motor.target_velocity = constrain(right_speed, -MAX_SPEED_CMD, MAX_SPEED_CMD);
 }
 
 void pid_control_task(void * arg) {
