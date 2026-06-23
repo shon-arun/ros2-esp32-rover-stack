@@ -131,8 +131,8 @@ typedef struct {
 
 // Initialize memory states with baseline tuning parameters
 // target, slewed, current, prev_vel, prev_ticks_F, prev_ticks_R, prev_error, integral, K_v, K_s, K_p, K_i, K_d, max_accel
-MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 115.0, 200.0, 40.0, 0.0, 1.5};
-MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 125.0, 200.0, 40.0, 0.0, 1.5};
+MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 115.0, 160.0, 90.0, 0.0, 1.5};
+MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 125.0, 160.0, 90.0, 0.0, 1.5};
 
 // MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 30.0, 98.0, 600.0, 0.0, 0.0, 1.5};
 // MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 30.0, 98.0, 600.0, 0.0, 0.0, 1.5};
@@ -208,8 +208,6 @@ void cmd_vel_callback(const void * msgin) {
   float right_speed = 0.0;
 
   if (abs(current_cmd_linear) > 0.05 || abs(current_cmd_angular) > 0.05) {
-      // FIX: Added Half-Track Width Multiplier (L/2). 
-      // Assuming track width is 0.20m based on odometry constants.
       const float HALF_TRACK_WIDTH = 0.10; 
       
       left_speed = current_cmd_linear - (current_cmd_angular * HALF_TRACK_WIDTH);
