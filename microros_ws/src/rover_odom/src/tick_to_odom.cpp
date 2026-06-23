@@ -77,24 +77,26 @@ private:
         }
 
         // Calculate raw velocities and apply Moving Average Filter
-        double raw_v_x = d_center / dt;
-        double raw_v_z = d_theta / dt;
+        // (UPDATED: Using velocity of averages to mitigate network jitter)
+        dx_history_.push_back(d_center);
+        dz_history_.push_back(d_theta);
+        dt_history_.push_back(dt);
 
-        vel_x_history_.push_back(raw_v_x);
-        vel_z_history_.push_back(raw_v_z);
-
-        if (vel_x_history_.size() > filter_window_size_) {
-            vel_x_history_.pop_front();
-            vel_z_history_.pop_front();
+        if (dt_history_.size() > filter_window_size_) {
+            dx_history_.pop_front();
+            dz_history_.pop_front();
+            dt_history_.pop_front();
         }
 
-        double filtered_v_x = 0.0;
-        double filtered_v_z = 0.0;
-        for (double v : vel_x_history_) filtered_v_x += v;
-        for (double v : vel_z_history_) filtered_v_z += v;
+        double total_dx = 0.0;
+        double total_dz = 0.0;
+        double total_dt = 0.0;
+        for (double dx : dx_history_) total_dx += dx;
+        for (double dz : dz_history_) total_dz += dz;
+        for (double t : dt_history_) total_dt += t;
         
-        filtered_v_x /= vel_x_history_.size();
-        filtered_v_z /= vel_z_history_.size();
+        double filtered_v_x = (total_dt > 0.0) ? (total_dx / total_dt) : 0.0;
+        double filtered_v_z = (total_dt > 0.0) ? (total_dz / total_dt) : 0.0;
 
         // 7. Publish Odometry Message
         nav_msgs::msg::Odometry odom;
@@ -148,8 +150,9 @@ private:
     bool first_reading_;
     rclcpp::Time last_time_;
 
-    std::deque<double> vel_x_history_;
-    std::deque<double> vel_z_history_;
+    std::deque<double> dx_history_;
+    std::deque<double> dz_history_;
+    std::deque<double> dt_history_;
     const size_t filter_window_size_ = 5;
 
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
