@@ -107,7 +107,8 @@ void IRAM_ATTR isr_RR() {
 
 // --- Kinematics & PID Controllers ---
 const float MAX_SPEED_CMD = 1.0; 
-const float METERS_PER_TICK = (2.0 * PI * 0.0325) / 20.0; // 65mm wheel, 20 slots
+// const float METERS_PER_TICK = (2.0 * PI * 0.0325) / 20.0; // 65mm wheel, 20 slots
+const float METERS_PER_TICK = (2.0 * PI * 0.0325) / 40.0; // 65mm wheel, 20 slots
 const float EMA_ALPHA = 0.3; 
 
 typedef struct {
