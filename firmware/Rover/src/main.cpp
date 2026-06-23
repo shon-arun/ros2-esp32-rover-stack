@@ -131,8 +131,8 @@ typedef struct {
 
 // Initialize memory states with baseline tuning parameters
 // target, slewed, current, prev_vel, prev_ticks_F, prev_ticks_R, prev_error, integral, K_v, K_s, K_p, K_i, K_d, max_accel
-MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 115.0, 500.0, 30.0, 0.0, 1.5};
-MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 125.0, 500.0, 30.0, 0.0, 1.5};
+MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 115.0, 200.0, 40.0, 0.0, 1.5};
+MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 60.0, 125.0, 200.0, 40.0, 0.0, 1.5};
 
 // MotorController left_motor  = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 30.0, 98.0, 600.0, 0.0, 0.0, 1.5};
 // MotorController right_motor = {0.0, 0.0, 0.0, 0.0, 0, 0, 0.0, 0.0, 30.0, 98.0, 600.0, 0.0, 0.0, 1.5};
@@ -208,8 +208,12 @@ void cmd_vel_callback(const void * msgin) {
   float right_speed = 0.0;
 
   if (abs(current_cmd_linear) > 0.05 || abs(current_cmd_angular) > 0.05) {
-      left_speed = current_cmd_linear - current_cmd_angular;
-      right_speed = current_cmd_linear + current_cmd_angular;
+      // FIX: Added Half-Track Width Multiplier (L/2). 
+      // Assuming track width is 0.20m based on odometry constants.
+      const float HALF_TRACK_WIDTH = 0.10; 
+      
+      left_speed = current_cmd_linear - (current_cmd_angular * HALF_TRACK_WIDTH);
+      right_speed = current_cmd_linear + (current_cmd_angular * HALF_TRACK_WIDTH);
   }
 
   left_motor.target_velocity = constrain(left_speed, -MAX_SPEED_CMD, MAX_SPEED_CMD);
@@ -292,7 +296,7 @@ void pid_control_task(void * arg) {
         // --- PID Error Calculation ---
         float error = m->slewed_velocity - m->current_velocity;
         m->integral += error * dt;
-        m->integral = constrain(m->integral, -50.0, 50.0); // Anti-windup
+        m->integral = constrain(m->integral, -100.0, 100.0); // Anti-windup
         
         // Derivative based on measurement to prevent derivative kick
         float derivative = -(m->current_velocity - m->prev_velocity) / dt;
