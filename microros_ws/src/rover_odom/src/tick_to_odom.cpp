@@ -15,7 +15,8 @@ public:
         // --- HARDCODED CHASSIS CONSTANTS ---
         wheel_radius_ = 0.0325; // 65mm standard yellow wheel
         track_width_ = 0.20;    // ~20cm track width for acrylic kit
-        ticks_per_rev_ = 20.0;  // 20 slots
+        // ticks_per_rev_ = 20.0;  // 20 slots
+        ticks_per_rev_ = 40.0;  // 20 slots
 
         odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>("odom", 10);
 
