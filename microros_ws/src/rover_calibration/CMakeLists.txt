@@ -28,7 +28,7 @@ endif()
 
 # --- Square Driver Target ---
 add_executable(square_driver src/square_driver.cpp)
-ament_target_dependencies(square_driver rclcpp geometry_msgs nav_msgs)
+ament_target_dependencies(square_driver rclcpp geometry_msgs nav_msgs tf2 tf2_geometry_msgs)
 
 # --- Straight Line Driver Target ---
 add_executable(straight_line_driver src/straight_line_driver.cpp)
