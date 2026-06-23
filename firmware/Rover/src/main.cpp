@@ -108,6 +108,7 @@ void IRAM_ATTR isr_RR() {
 // --- Kinematics & PID Controllers ---
 const float MAX_SPEED_CMD = 1.0; 
 const float METERS_PER_TICK = (2.0 * PI * 0.0325) / 20.0; // 65mm wheel, 20 slots
+const float EMA_ALPHA = 0.3; 
 
 typedef struct {
     float target_velocity;
@@ -264,8 +265,12 @@ void pid_control_task(void * arg) {
     float left_dir = (left_motor.slewed_velocity >= 0.0) ? 1.0 : -1.0;
     float right_dir = (right_motor.slewed_velocity >= 0.0) ? 1.0 : -1.0;
 
-    left_motor.current_velocity = speed_mag_left * left_dir;
-    right_motor.current_velocity = speed_mag_right * right_dir;
+    float raw_vel_left = speed_mag_left * left_dir;
+    float raw_vel_right = speed_mag_right * right_dir;
+
+    // --- EMA Filter ---
+    left_motor.current_velocity = (EMA_ALPHA * raw_vel_left) + ((1.0 - EMA_ALPHA) * left_motor.current_velocity);
+    right_motor.current_velocity = (EMA_ALPHA * raw_vel_right) + ((1.0 - EMA_ALPHA) * right_motor.current_velocity);
 
     // --- NEW: Accumulate signed ticks for ROS ---
     ros_ticks_FL += raw_d_FL * (int32_t)left_dir;
