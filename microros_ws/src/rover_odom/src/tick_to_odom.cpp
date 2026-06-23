@@ -1,8 +1,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/int32_multi_array.hpp>
 #include <nav_msgs/msg/odometry.hpp>
-#include <geometry_msgs/msg/transform_stamped.hpp>
-#include <tf2_ros/transform_broadcaster.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <cmath>
 #include <deque>
@@ -20,16 +18,12 @@ public:
         ticks_per_rev_ = 20.0;  // 20 slots
 
         odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>("odom", 10);
-        
-        // Note: If you use robot_localization (ekf.yaml) with publish_tf: true, 
-        // you might want to remove this TF broadcaster to avoid conflicts.
-        tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
         tick_sub_ = this->create_subscription<std_msgs::msg::Int32MultiArray>(
             "/wheel_ticks", rclcpp::SensorDataQoS(),
             std::bind(&TickToOdom::tick_callback, this, std::placeholders::_1));
 
-        RCLCPP_INFO(this->get_logger(), "C++ Tick-to-Odometry Node Initialized with Moving Average Filter.");
+        RCLCPP_INFO(this->get_logger(), "C++ Tick-to-Odometry Node Initialized (TF Broadcaster Disabled for EKF).");
     }
 
 private:
@@ -82,7 +76,7 @@ private:
             return; 
         }
 
-        // --- NEW: Calculate raw velocities and apply Moving Average Filter ---
+        // Calculate raw velocities and apply Moving Average Filter
         double raw_v_x = d_center / dt;
         double raw_v_z = d_theta / dt;
 
@@ -102,47 +96,37 @@ private:
         filtered_v_x /= vel_x_history_.size();
         filtered_v_z /= vel_z_history_.size();
 
-        // 7. Publish TF Transform (odom -> base_link)
-        geometry_msgs::msg::TransformStamped t;
-        t.header.stamp = now;
-        t.header.frame_id = "odom";
-        t.child_frame_id = "base_link";
-        t.transform.translation.x = x_;
-        t.transform.translation.y = y_;
-        t.transform.translation.z = 0.0;
-
-        tf2::Quaternion q;
-        q.setRPY(0, 0, th_);
-        t.transform.rotation.x = q.x();
-        t.transform.rotation.y = q.y();
-        t.transform.rotation.z = q.z();
-        t.transform.rotation.w = q.w();
-
-        // tf_broadcaster_->sendTransform(t);
-
-        // 8. Publish Odometry Message
+        // 7. Publish Odometry Message
         nav_msgs::msg::Odometry odom;
         odom.header.stamp = now;
         odom.header.frame_id = "odom";
         odom.child_frame_id = "base_link";
+        
         odom.pose.pose.position.x = x_;
         odom.pose.pose.position.y = y_;
         odom.pose.pose.position.z = 0.0;
-        odom.pose.pose.orientation = t.transform.rotation;
+
+        // Calculate and populate rotation quaternion locally for the odom topic
+        tf2::Quaternion q;
+        q.setRPY(0, 0, th_);
+        odom.pose.pose.orientation.x = q.x();
+        odom.pose.pose.orientation.y = q.y();
+        odom.pose.pose.orientation.z = q.z();
+        odom.pose.pose.orientation.w = q.w();
 
         odom.pose.covariance[0] = 0.1;
         odom.pose.covariance[7] = 0.1;
         odom.pose.covariance[35] = 0.1;
 
-        odom.twist.covariance[0] = 0.01;  
-        odom.twist.covariance[35] = 0.5; 
+        odom.twist.covariance[0] = 0.01;
+        odom.twist.covariance[35] = 0.5;
 
         odom.twist.twist.linear.x = filtered_v_x;
         odom.twist.twist.angular.z = filtered_v_z;
 
         odom_pub_->publish(odom);
 
-        // 9. Update state for the next loop
+        // 8. Update state for the next loop
         last_ticks_FL_ = msg->data[0];
         last_ticks_RL_ = msg->data[1];
         last_ticks_FR_ = msg->data[2];
@@ -156,7 +140,6 @@ private:
 
     double x_, y_, th_;
     
-    // Fixed: Track all 4 wheels independently 
     double last_ticks_FL_, last_ticks_RL_;
     double last_ticks_FR_, last_ticks_RR_;
     
@@ -165,10 +148,9 @@ private:
 
     std::deque<double> vel_x_history_;
     std::deque<double> vel_z_history_;
-    const size_t filter_window_size_ = 5; 
+    const size_t filter_window_size_ = 5;
 
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
-    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     rclcpp::Subscription<std_msgs::msg::Int32MultiArray>::SharedPtr tick_sub_;
 };
 
