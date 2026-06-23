@@ -2,6 +2,7 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <tf2/utils.h> // [UPDATE] Added tf2 utilities for robust quaternion math
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp> // [FIX] Added bridge for geometry_msgs to tf2 conversion
 #include <cmath>
 #include <algorithm>
 #include <chrono>
@@ -102,9 +103,10 @@ private:
 
         if (state_ == DONE) {
             publish_stop();
-            // [UPDATE] Gracefully cancel the timer instead of killing the node executor
-            RCLCPP_INFO(this->get_logger(), "Rotation sequence complete. Shutting down control loop.");
-            timer_->cancel();
+            // [FIX] Sleep briefly to ensure the stop message transmits, then cleanly shutdown the node.
+            rclcpp::sleep_for(std::chrono::milliseconds(100));
+            RCLCPP_INFO(this->get_logger(), "Rotation sequence complete. Shutting down.");
+            rclcpp::shutdown();
             return;
         }
 
