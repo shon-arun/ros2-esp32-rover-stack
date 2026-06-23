@@ -15,18 +15,18 @@ public:
         // --- Straight Line Parameters ---
         this->declare_parameter("target_distance", 1.0);       
         this->declare_parameter("max_velocity", 0.2);          
-        this->declare_parameter("max_acceleration", 0.15);     
+        this->declare_parameter("max_acceleration", 0.2);     
         this->declare_parameter("kp_yaw", 1.5);                
         this->declare_parameter("max_yaw_correction_vel", 1.0); 
         this->declare_parameter("linear_tolerance", 0.005);           
         this->declare_parameter("min_sustainable_vel", 0.08);  
 
         // --- Rotation Parameters ---
-        this->declare_parameter("target_angle", 1.5708);       
-        this->declare_parameter("max_angular_velocity", 3.0);          
-        this->declare_parameter("max_angular_acceleration", 1.5);     
-        this->declare_parameter("angular_tolerance", 0.10);           
-        this->declare_parameter("min_sustainable_angular_vel", 0.5);  
+        this->declare_parameter("target_angle", 1.5708);
+        this->declare_parameter("max_angular_velocity", 5.0);       
+        this->declare_parameter("max_angular_acceleration", 2.5);     
+        this->declare_parameter("angular_tolerance", 0.15);           
+        this->declare_parameter("min_sustainable_angular_vel", 3.0);  
 
         // Fetch and sanitize parameters
         target_distance_ = std::abs(this->get_parameter("target_distance").as_double());

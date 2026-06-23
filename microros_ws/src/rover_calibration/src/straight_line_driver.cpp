@@ -7,11 +7,11 @@
 
 class StraightLineDriver : public rclcpp::Node {
 public:
-    StraightLineDriver() : Node("straight_line_driver"), state_(WAITING_FOR_ODOM), v_cmd_(0.0), pose_initialized_(false) {
+    StraightLineDriver() : Node("straight_line_driver"), state_(WAITING_FOR_ODOM), pose_initialized_(false), v_cmd_(0.0) {
         // --- Parameters ---
         this->declare_parameter("target_distance", 1.0);       
         this->declare_parameter("max_velocity", 0.2);          
-        this->declare_parameter("max_acceleration", 0.15);     
+        this->declare_parameter("max_acceleration", 0.2);     
         this->declare_parameter("kp_yaw", 1.5);                
         this->declare_parameter("max_angular_velocity", 1.0); 
         this->declare_parameter("tolerance", 0.005);           
