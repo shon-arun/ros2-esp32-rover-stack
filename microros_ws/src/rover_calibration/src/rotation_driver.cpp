@@ -9,7 +9,7 @@
 
 class RotationDriver : public rclcpp::Node {
 public:
-    RotationDriver() : Node("rotation_driver"), state_(WAITING_FOR_ODOM), w_cmd_(0.0), pose_initialized_(false), yaw_traveled_(0.0) {
+    RotationDriver() : Node("rotation_driver"), state_(WAITING_FOR_ODOM), pose_initialized_(false), yaw_traveled_(0.0), w_cmd_(0.0) {
         // --- Parameters ---
         this->declare_parameter("target_angle", 1.5708);       
         this->declare_parameter("max_angular_velocity", 1.0);          
