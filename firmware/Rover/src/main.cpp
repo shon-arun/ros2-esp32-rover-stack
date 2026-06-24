@@ -238,7 +238,7 @@ void pid_control_task(void * arg) {
     portENTER_CRITICAL(&mux);
     curr_FL = ticks_FL;
     curr_RL = ticks_RL;
-    curr_FR = tilcks_FR;
+    curr_FR = ticks_FR;
     curr_RR = ticks_RR;
     portEXIT_CRITICAL(&mux);
 
@@ -492,7 +492,7 @@ void led_watchdog_task(void * arg) {
   }
 }
 
-
+/*
 void setup() {
   Serial.begin(115200);
   set_microros_serial_transports(Serial);
@@ -591,8 +591,8 @@ void setup() {
   xTaskCreatePinnedToCore(led_watchdog_task, "led_task", 2048, NULL, 1, NULL, 1);
   vTaskDelete(NULL);
 }
+*/
 
-/*
 // WiFi setup
 void setup() {
   Serial.begin(115200);
@@ -688,7 +688,7 @@ void setup() {
 
   leds[0] = CRGB::Blue; FastLED.show();
   IPAddress agent_ip(192, 168, 4, 1);
-  set_microros_wifi_transports((char*)"Pi_Hotspot", (char*)"SuperSecretPassword", agent_ip, 8888);
+  set_microros_wifi_transports((char*)"Pi_Hotspot1", (char*)"SuperSecretPassword", agent_ip, 8888);
 
   bool toggle_blue = false;
   while (rmw_uros_ping_agent(1000, 1) != RMW_RET_OK) {
@@ -744,6 +744,6 @@ void setup() {
   xTaskCreatePinnedToCore(led_watchdog_task, "led_task", 2048, NULL, 1, NULL, 1);
   vTaskDelete(NULL);
 }
-*/
+
 
 void loop() { }

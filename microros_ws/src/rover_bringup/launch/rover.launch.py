@@ -22,7 +22,7 @@ def generate_launch_description():
             package='micro_ros_agent',
             executable='micro_ros_agent',
             name='micro_ros_agent',
-            arguments=['serial', '--dev', '/dev/ttyACM0', '-b', '115200'],
+            arguments=['udp4', '--port', '8888'],
             output='screen'
         ),
 
