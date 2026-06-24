@@ -96,6 +96,29 @@ def generate_launch_description():
             name='base_to_imu_tf',
             # Arguments: [X, Y, Z, Yaw, Pitch, Roll, Parent, Child]
             arguments=['0', '0', '0', '0', '0', '0', 'base_link', 'imu_link']
+        ),
+
+        # 9. The V4L2 Camera Node (Optimized for 0.2 m/s vSLAM)
+        Node(
+            package='v4l2_camera',
+            executable='v4l2_camera_node',
+            name='v4l2_camera',
+            namespace='',
+            prefix=['libcamerify'],
+            parameters=[{
+                'video_device': '/dev/video0',
+                'image_size': [640, 480],       # VGA resolution
+                'time_per_frame': [1, 15],      # 15 FPS
+                'pixel_format': 'YUYV',         # Native hardware format
+                'output_encoding': 'mono8',      # Convert to Grayscale for vSLAM
+                'use_sensor_data_qos': True
+            }],
+            # Remap to standard topics if necessary for your SLAM config
+            remappings=[
+                ('/image_raw', '/camera/image_raw'),
+                ('/image_raw/compressed', '/camera/image_raw/compressed')
+            ],
+            output='screen'
         )
 
     ])
