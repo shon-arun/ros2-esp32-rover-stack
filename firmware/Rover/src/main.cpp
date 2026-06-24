@@ -658,7 +658,7 @@ void setup() {
 
   while (WiFi.status() != WL_CONNECTED && (millis() - global_start < TOTAL_TIMEOUT_MS)) {
       WiFi.disconnect(true, true); delay(200);
-      WiFi.begin("Pi_Hotspot", "SuperSecretPassword");
+      WiFi.begin("Pi_Hotspot1", "SuperSecretPassword");
       unsigned long phase_start = millis();
       while (WiFi.status() != WL_CONNECTED && (millis() - phase_start < 10000)) {
           leds[0] = (millis() % 1000 < 500) ? CRGB::Yellow : CRGB::Black; FastLED.show(); delay(250);
@@ -668,7 +668,7 @@ void setup() {
       WiFi.disconnect(); delay(200);
       uint8_t new_mac[6]; esp_read_mac(new_mac, ESP_MAC_WIFI_STA);
       new_mac[5] = (new_mac[5] + (millis() % 50) + 1) % 255; esp_wifi_set_mac(WIFI_IF_STA, new_mac);
-      WiFi.begin("Pi_Hotspot", "SuperSecretPassword");
+      WiFi.begin("Pi_Hotspot1", "SuperSecretPassword");
       phase_start = millis();
       while (WiFi.status() != WL_CONNECTED && (millis() - phase_start < 10000)) {
           leds[0] = (millis() % 200 < 100) ? CRGB::Magenta : CRGB::Black; FastLED.show(); delay(100);
@@ -687,7 +687,7 @@ void setup() {
   }
 
   leds[0] = CRGB::Blue; FastLED.show();
-  IPAddress agent_ip(192, 168, 4, 1);
+  IPAddress agent_ip(192, 168, 5, 1);
   set_microros_wifi_transports((char*)"Pi_Hotspot1", (char*)"SuperSecretPassword", agent_ip, 8888);
 
   bool toggle_blue = false;
