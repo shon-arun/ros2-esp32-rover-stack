@@ -446,7 +446,7 @@ void micro_ros_task(void * arg) {
           }
       }
     }
-    vTaskDelay(20 / portTICK_PERIOD_MS);
+    vTaskDelay(5 / portTICK_PERIOD_MS);
   }
 }
 
@@ -610,7 +610,7 @@ void setup() {
   } else {
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ); // The 21Hz internal hardware low-pass filter
+    mpu.setFilterBandwidth(MPU6050_BAND_260_HZ);
   }
 
   // --- DEEP IMU CALIBRATION ---
