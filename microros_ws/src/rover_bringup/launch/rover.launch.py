@@ -95,7 +95,7 @@ def generate_launch_description():
             executable='static_transform_publisher',
             name='base_to_imu_tf',
             # Arguments: [X, Y, Z, Yaw, Pitch, Roll, Parent, Child]
-            arguments=['0.10', '0', '0', '0', '0', '0', 'base_link', 'imu_link']
+            arguments=['0.100.', '0.035', '0.05', '0', '0', '0', 'base_link', 'imu_link']
         ),
 
         # 9. The V4L2 Camera Node (Optimized for 0.2 m/s vSLAM)
@@ -111,14 +111,15 @@ def generate_launch_description():
                 'time_per_frame': [1, 15],      # 15 FPS
                 'pixel_format': 'YUYV',         # Native hardware format
                 'output_encoding': 'mono8',      # Convert to Grayscale for vSLAM
-                'use_sensor_data_qos': True
+                'use_sensor_data_qos': True,
+                'camera_info_url': 'package://rover_bringup/config/custom_camera_info.yaml'
             }],
             # Remap to standard topics if necessary for your SLAM config
             remappings=[
                 ('/image_raw', '/camera/image_raw'),
                 ('/image_raw/compressed', '/camera/image_raw/compressed')
             ],
-            output='screen'
+            output='screen',
         ),
 
         # 10. Bridge the Camera to the Chassis (Inverted & Pointing Up)
@@ -128,7 +129,7 @@ def generate_launch_description():
             name='base_to_camera_tf',
             # Example: 10cm forward (0.1), centered (0.0), 15cm high (0.15)
             # Rotation: 0 Yaw, -0.15 Pitch (Up), 3.14159 Roll (Inverted)
-            arguments=['0.12', '0.0', '0.05', '0.0', '-0.15', '3.14159', 'base_link', 'camera']
+            arguments=['0.118', '0.0', '0.089', '0.0', '-0.47', '3.14159', 'base_link', 'camera']
         ),
 
     ])
