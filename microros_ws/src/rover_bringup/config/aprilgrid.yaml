@@ -1,0 +1,5 @@
+target_type: 'aprilgrid'
+tagCols: 6
+tagRows: 6
+tagSize: 0.019  # CHANGE THIS: The size of one black square in meters
+tagSpacing: 0.3 # The gap fraction (leave as 0.3)
