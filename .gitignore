@@ -9,13 +9,14 @@ esp32_firmware/lib/
 *.map
 
 # ==========================================
-# ROS 2 Workspace (Colcon)
+# ROS 2 Workspace
 # ==========================================
 microros_ws/build/
 microros_ws/install/
 microros_ws/log/
 *.cmake
 Makefile
+*.bag
 
 # ==========================================
 # Python / Node Caches
