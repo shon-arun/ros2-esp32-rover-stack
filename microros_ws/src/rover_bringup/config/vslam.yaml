@@ -1,0 +1,26 @@
+rtabmap:
+  ros__parameters:
+    subscribe_depth: false
+    subscribe_rgb: true
+    subscribe_odom: true
+    
+    frame_id: "base_link"
+    odom_frame_id: "odom"
+    map_frame_id: "map"
+    publish_tf: true
+
+    # Core Strategy
+    Rtabmap/DetectionRate: "10"      
+    RGBD/LinearUpdate: "0.1"         
+    RGBD/AngularUpdate: "0.1"        
+    
+    # Monocular Grayscale (mono8) Configuration
+    Kp/DetectorStrategy: "2"         # 2=ORB features (Highly efficient for grayscale)
+    Vis/FeatureType: "2"             # 2=ORB
+    
+    Reg/Strategy: "0"                # 0=Visual Registration
+    Vis/EstimationType: "1"          # 1=2D-2D Epipolar Geometry (Crucial for no-depth setups)
+    Vis/MinInliers: "15"             
+    Vis/MaxFeatures: "1000"          
+
+    RGBD/CreateOccupancyGrid: "false"
