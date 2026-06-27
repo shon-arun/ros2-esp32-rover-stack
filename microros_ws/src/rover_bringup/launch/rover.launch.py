@@ -129,7 +129,7 @@ def generate_launch_description():
             name='base_to_camera_tf',
             # Example: 10cm forward (0.1), centered (0.0), 15cm high (0.15)
             # Rotation: 0 Yaw, -0.15 Pitch (Up), 3.14159 Roll (Inverted)
-            arguments=['0.118', '0.0', '0.089', '0.0', '-0.47', '3.14159', 'base_link', 'camera']
+            arguments=['0.118', '0.0', '0.089', '1.61726', '0.02774', '1.12217', 'base_link', 'camera']
         ),
 
     ])
