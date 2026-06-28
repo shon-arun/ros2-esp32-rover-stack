@@ -117,7 +117,8 @@ def generate_launch_description():
             # Remap to standard topics if necessary for your SLAM config
             remappings=[
                 ('/image_raw', '/camera/image_raw'),
-                ('/image_raw/compressed', '/camera/image_raw/compressed')
+                ('/image_raw/compressed', '/camera/image_raw/compressed'),
+                ('/camera_info', '/camera/camera_info')
             ],
             output='screen',
         ),

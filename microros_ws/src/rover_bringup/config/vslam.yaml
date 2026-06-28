@@ -1,5 +1,9 @@
 rtabmap:
   ros__parameters:
+    # --- FIX: Match the camera's Best Effort QoS ---
+    qos_image: 2
+    qos_camera_info: 2
+
     subscribe_depth: false
     subscribe_rgb: true
     subscribe_odom: true
@@ -24,3 +28,16 @@ rtabmap:
     Vis/MaxFeatures: "1000"          
 
     RGBD/CreateOccupancyGrid: "false"
+
+# --- FIX: Add missing namespace for the Visualizer ---
+rtabmap_viz:
+  ros__parameters:
+    qos_image: 2
+    qos_camera_info: 2
+    
+    subscribe_depth: false
+    subscribe_rgb: true
+    subscribe_odom: true
+    
+    frame_id: "base_link"
+    odom_frame_id: "odom"
