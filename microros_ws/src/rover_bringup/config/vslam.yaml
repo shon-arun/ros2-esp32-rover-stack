@@ -1,8 +1,8 @@
 rtabmap:
   ros__parameters:
-    # --- FIX: Match the camera's Best Effort QoS ---
     qos_image: 2
     qos_camera_info: 2
+    wait_for_transform: 0.2
 
     subscribe_depth: false
     subscribe_rgb: true
@@ -18,22 +18,23 @@ rtabmap:
     RGBD/LinearUpdate: "0.1"         
     RGBD/AngularUpdate: "0.1"        
     
-    # Monocular Grayscale (mono8) Configuration
-    Kp/DetectorStrategy: "2"         # 2=ORB features (Highly efficient for grayscale)
+    # Monocular Grayscale Configuration
+    Kp/DetectorStrategy: "2"         # 2=ORB features 
     Vis/FeatureType: "2"             # 2=ORB
-    
     Reg/Strategy: "0"                # 0=Visual Registration
-    Vis/EstimationType: "1"          # 1=2D-2D Epipolar Geometry (Crucial for no-depth setups)
+    
+    # --- THE REAL FIX: 2 = Pure 2D-2D Epipolar Geometry ---
+    Vis/EstimationType: "2"          
     Vis/MinInliers: "15"             
     Vis/MaxFeatures: "1000"          
 
     RGBD/CreateOccupancyGrid: "false"
 
-# --- FIX: Add missing namespace for the Visualizer ---
 rtabmap_viz:
   ros__parameters:
     qos_image: 2
     qos_camera_info: 2
+    wait_for_transform: 0.2
     
     subscribe_depth: false
     subscribe_rgb: true
