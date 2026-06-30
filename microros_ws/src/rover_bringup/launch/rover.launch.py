@@ -110,7 +110,7 @@ def generate_launch_description():
                 'image_size': [640, 480],        # VGA resolution
                 'time_per_frame': [1, 15],       # 15 FPS
                 'pixel_format': 'YUYV',          # Native hardware format
-                'camera_name': 'camera',
+                'camera_frame_id': 'camera',
                 # 'output_encoding': 'mono8',      # Convert to Grayscale for vSLAM
                 'output_encoding': 'yuv422_yuy2',# MATCHES native format = ZERO conversion!
                 'use_sensor_data_qos': True,
