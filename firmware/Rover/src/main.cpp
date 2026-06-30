@@ -687,7 +687,7 @@ void setup() {
   }
 
   leds[0] = CRGB::Blue; FastLED.show();
-  IPAddress agent_ip(192, 168, 5, 1);
+  IPAddress agent_ip(10, 42, 0, 1);
   set_microros_wifi_transports((char*)"Pi_Hotspot1", (char*)"SuperSecretPassword", agent_ip, 8888);
 
   bool toggle_blue = false;
