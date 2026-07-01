@@ -62,21 +62,19 @@ def generate_launch_description():
             package='rtabmap_odometry',
             executable='rgbd_odometry',
             name='rgbd_odometry',
-            parameters=[vslam_config],
+            parameters=[
+                vslam_config,
+                {
+                    'publish_tf': False,
+                    'frame_id': 'base_link',
+                    'odom_frame_id': 'vo'
+                }
+            ],
             remappings=[
                 ('rgb/image', '/camera/image_raw_decompressed'),
                 ('depth/image', '/camera/depth/image_raw'),
                 ('rgb/camera_info', '/camera/camera_info'),
-            ],
-            # Crucial: Tell it NOT to publish a TF directly, 
-            # because our EKF node will handle the TF generation!
-            parameters=[{
-                'publish_tf': False,
-                'frame_id': 'base_link',
-                'odom_frame_id': 'vo'
-            }],
-            remappings=[
-                ('odom', '/vo') # Output topic name
+                ('odom', '/vo')
             ],
             output='screen'
         ),
