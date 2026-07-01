@@ -112,7 +112,8 @@ def generate_launch_description():
                 'pixel_format': 'YUYV',          # Native hardware format
                 'camera_frame_id': 'camera',
                 # 'output_encoding': 'mono8',      # Convert to Grayscale for vSLAM
-                'output_encoding': 'yuv422_yuy2',# MATCHES native format = ZERO conversion!
+                # 'output_encoding': 'yuv422_yuy2',# MATCHES native format = ZERO conversion!
+                'output_encoding': 'bgr8',
                 'use_sensor_data_qos': True,
                 'camera_info_url': 'package://rover_bringup/config/custom_camera_info.yaml'
             }],
