@@ -22,7 +22,6 @@ class AIDepthPreview(Node):
             self.image_callback,
             10)
             
-        # NEW: Publisher for the AI Depth Map
         self.depth_pub = self.create_publisher(Image, '/camera/depth/image_raw', 10)
             
         self.get_logger().info("Loading AI Depth Model onto GPU...")
@@ -34,6 +33,8 @@ class AIDepthPreview(Node):
         )
         self.get_logger().info("Model loaded successfully!")
 
+        self.pseudo_focal_baseline = 59.3 
+
     def image_callback(self, msg):
         try:
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
@@ -41,39 +42,29 @@ class AIDepthPreview(Node):
             
             result = self.depth_estimator(pil_img)
             
-            # --- NEW ROS PUBLISHING LOGIC ---
-            # 1. Get raw depth array as floats
-            depth_cv = np.array(result["depth"]).astype(np.float32)
+            pred_depth = result["predicted_depth"].squeeze().cpu().numpy()
             
-            # 2. Normalize to 0-1, then scale to an arbitrary "millimeter" range. 
-            # (Note: AI monocular depth is relative. We scale it here to an assumed 10 meter max depth)
-            fixed_scale = 255.0 / np.max(depth_cv) # Do this ONCE during init, or use a hardcoded max
+            original_h, original_w = cv_image.shape[:2]
+            depth_resized = cv2.resize(pred_depth, (original_w, original_h), interpolation=cv2.INTER_LINEAR)
             
-            # Use a static multiplier so 1 meter is always represented by the same pixel intensity
-            depth_normalized = np.clip(depth_cv / 10.0, 0.0, 1.0)
-            depth_mm = (depth_normalized * 10000).astype(np.uint16)
+            safe_depth = np.clip(depth_resized, a_min=0.001, a_max=None)
             
-            # 3. Convert to ROS Image message (16-bit unsigned integer)
+            metric_depth_meters = self.pseudo_focal_baseline / safe_depth 
+            
+            metric_depth_meters = np.clip(metric_depth_meters, 0.0, 10.0)
+            
+            depth_mm = (metric_depth_meters * 1000.0).astype(np.uint16)
+            
             depth_msg = self.bridge.cv2_to_imgmsg(depth_mm, encoding="16UC1")
             
-            # 4. Copy the exact header/timestamp from the incoming RGB frame! 
-            # RTAB-Map will reject the frame if the RGB and Depth timestamps don't match.
             depth_msg.header = msg.header 
             
             self.depth_pub.publish(depth_msg)
-            # --------------------------------
-            
-            # Keep visualizer for debugging
-            depth_viz = cv2.applyColorMap(cv2.normalize(depth_cv, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U), cv2.COLORMAP_INFERNO)
-            cv2.imshow("Raw Rover Stream", cv_image)
-            cv2.imshow("AI Depth Map", depth_viz)
-            cv2.waitKey(1)
             
         except Exception as e:
             self.get_logger().error(f"Error processing frame: {e}")
 
 def main(args=None):
-    # ... (Keep main function exactly the same)
     rclpy.init(args=args)
     node = AIDepthPreview()
     try:
@@ -83,7 +74,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-        cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     main()
