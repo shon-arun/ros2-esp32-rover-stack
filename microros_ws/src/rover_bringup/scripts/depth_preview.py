@@ -47,7 +47,10 @@ class AIDepthPreview(Node):
             
             # 2. Normalize to 0-1, then scale to an arbitrary "millimeter" range. 
             # (Note: AI monocular depth is relative. We scale it here to an assumed 10 meter max depth)
-            depth_normalized = cv2.normalize(depth_cv, None, 0, 1.0, cv2.NORM_MINMAX)
+            fixed_scale = 255.0 / np.max(depth_cv) # Do this ONCE during init, or use a hardcoded max
+            
+            # Use a static multiplier so 1 meter is always represented by the same pixel intensity
+            depth_normalized = np.clip(depth_cv / 10.0, 0.0, 1.0)
             depth_mm = (depth_normalized * 10000).astype(np.uint16)
             
             # 3. Convert to ROS Image message (16-bit unsigned integer)
