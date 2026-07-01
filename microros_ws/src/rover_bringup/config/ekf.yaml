@@ -25,7 +25,16 @@ ekf_filter_node:
                   true,  true,  true,     # <--- Roll, Pitch, Yaw
                   false, false, false,
                   true,  true,  true,     # <--- Angular Velocities (X, Y, Z)
-                  true, true, true]    # <--- Linear Accelerations (Ignored)
+                  true, true, true]
+    
+    # --- SENSOR 3: Visual Odometry from RTAB-Map ---
+    odom1: /vo
+    # We fuse relative visual velocities (the second row of 6 booleans)
+    odom1_config: [false, false, false,
+                   false, false, false,
+                   true,  true,  true,   # <--- Fuse Visual Vx, Vy, Vz
+                   true,  true,  true,   # <--- Fuse Visual Vroll, Vpitch, Vyaw
+                   false, false, false]
 
     # Redundant since linear acceleration is ignored above, but harmless to leave as true
     imu0_remove_gravitational_acceleration: true
