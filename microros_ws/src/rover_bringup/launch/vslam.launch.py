@@ -11,7 +11,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        # 1. Decompress the edge stream from the ESP32 network
+        # Decompress the edge stream from the ESP32 network
         Node(
             package='image_transport',
             executable='republish',
@@ -27,27 +27,14 @@ def generate_launch_description():
             ]
         ),
 
-        # 2. Automatically convert BGR8 to Mono8 (Grayscale)
-        Node(
-            package='image_proc',
-            executable='image_proc',
-            name='image_proc_converter',
-            remappings=[
-                ('image', '/camera/image_raw_decompressed'),
-                ('camera_info', '/camera/camera_info'),
-                ('image_mono', '/camera/image_mono')
-            ],
-            output='screen'
-        ),
-
-        # 3. SLAM Node
+        # SLAM Node
         Node(
             package='rtabmap_slam',
             executable='rtabmap',
             name='rtabmap',
             parameters=[vslam_config],
             remappings=[
-                ('rgb/image', '/camera/image_mono'),
+                ('rgb/image', '/camera/image_raw_decompressed'),
                 ('rgb/camera_info', '/camera/camera_info'),
                 ('odom', '/odometry/filtered')
             ],
@@ -55,14 +42,14 @@ def generate_launch_description():
             output='screen'
         ),
         
-        # 4. Visualizer
+        # Visualizer
         Node(
             package='rtabmap_viz',
             executable='rtabmap_viz',
             name='rtabmap_viz',
             parameters=[vslam_config],
             remappings=[
-                ('rgb/image', '/camera/image_mono'),
+                ('rgb/image', '/camera/image_raw_decompressed'),
                 ('rgb/camera_info', '/camera/camera_info'),
                 ('odom', '/odometry/filtered')
             ],
