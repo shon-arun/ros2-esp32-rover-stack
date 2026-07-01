@@ -35,6 +35,7 @@ def generate_launch_description():
             parameters=[vslam_config],
             remappings=[
                 ('rgb/image', '/camera/image_raw_decompressed'),
+                ('depth/image', '/camera/depth/image_raw'),
                 ('rgb/camera_info', '/camera/camera_info'),
                 ('odom', '/odometry/filtered')
             ],
@@ -50,6 +51,7 @@ def generate_launch_description():
             parameters=[vslam_config],
             remappings=[
                 ('rgb/image', '/camera/image_raw_decompressed'),
+                ('depth/image', '/camera/depth/image_raw'),
                 ('rgb/camera_info', '/camera/camera_info'),
                 ('odom', '/odometry/filtered')
             ],

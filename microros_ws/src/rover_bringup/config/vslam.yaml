@@ -2,9 +2,10 @@ rtabmap:
   ros__parameters:
     qos_image: 2
     qos_camera_info: 2
-    wait_for_transform: 0.2
+    
+    wait_for_transform: 2.0
 
-    subscribe_depth: false
+    subscribe_depth: true 
     subscribe_rgb: true
     subscribe_odom: true
     
@@ -13,30 +14,33 @@ rtabmap:
     map_frame_id: "map"
     publish_tf: true
 
-    # Core Strategy
+    topic_queue_size: 50
+    sync_queue_size: 50
+
     Rtabmap/DetectionRate: "10"      
     RGBD/LinearUpdate: "0.1"         
     RGBD/AngularUpdate: "0.1"        
     
-    # Monocular Grayscale Configuration
-    Kp/DetectorStrategy: "2"         # 2=ORB features 
-    Vis/FeatureType: "2"             # 2=ORB
-    Reg/Strategy: "0"                # 0=Visual Registration
+    Kp/DetectorStrategy: "2"         
+    Vis/FeatureType: "2"             
+    Reg/Strategy: "0"                
     
-    # --- THE REAL FIX: 2 = Pure 2D-2D Epipolar Geometry ---
-    Vis/EstimationType: "2"          
+    # 3D-2D estimation (1) or 3D-3D (0). 
+    # '2' was for pure 2D epipolar (monocular).
+    Vis/EstimationType: "1"          
     Vis/MinInliers: "15"             
     Vis/MaxFeatures: "1000"          
 
-    RGBD/CreateOccupancyGrid: "false"
+    RGBD/CreateOccupancyGrid: "true"
 
 rtabmap_viz:
   ros__parameters:
     qos_image: 2
     qos_camera_info: 2
-    wait_for_transform: 0.2
+
+    wait_for_transform: 2.0
     
-    subscribe_depth: false
+    subscribe_depth: true
     subscribe_rgb: true
     subscribe_odom: true
     
