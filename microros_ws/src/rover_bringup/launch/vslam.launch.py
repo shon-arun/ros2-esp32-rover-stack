@@ -59,7 +59,7 @@ def generate_launch_description():
         ),
 
         Node(
-            package='rtabmap_odometry',
+            package='rtabmap_odom',
             executable='rgbd_odometry',
             name='rgbd_odometry',
             parameters=[
