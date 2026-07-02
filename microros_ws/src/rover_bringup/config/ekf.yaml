@@ -1,8 +1,8 @@
 ekf_filter_node:
   ros__parameters:
     frequency: 30.0
-    two_d_mode: false      # <--- CORRECTED: Must be FALSE to unlock Z, Roll, and Pitch
-    publish_tf: true       # (Note: Requires a fix in tick_to_odom.cpp, see below)
+    two_d_mode: true  
+    publish_tf: true
 
     map_frame: map
     odom_frame: odom
@@ -22,9 +22,9 @@ ekf_filter_node:
     imu0: /imu/data
     # We feed the EKF everything except absolute X/Y/Z position.
     imu0_config: [false, false, false,
-                  true,  true,  true,     # <--- Roll, Pitch, Yaw
+                  false, false, true,
                   false, false, false,
-                  true,  true,  true,     # <--- Angular Velocities (X, Y, Z)
+                  false, false, true,
                   false, false, false]
     
     # --- SENSOR 3: Visual Odometry from RTAB-Map ---
@@ -32,8 +32,8 @@ ekf_filter_node:
     # We fuse relative visual velocities (the second row of 6 booleans)
     odom1_config: [false, false, false,
                    false, false, false,
-                   true,  true,  true,   # <--- Fuse Visual Vx, Vy, Vz
-                   true,  true,  true,   # <--- Fuse Visual Vroll, Vpitch, Vyaw
+                   true,  true,  false,
+                   false, false, true,
                    false, false, false]
 
     imu0_remove_gravitational_acceleration: false

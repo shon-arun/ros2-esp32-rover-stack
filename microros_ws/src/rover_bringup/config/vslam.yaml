@@ -20,7 +20,9 @@ rtabmap:
 
     Rtabmap/DetectionRate: "10"      
     RGBD/LinearUpdate: "0.1"         
-    RGBD/AngularUpdate: "0.1"        
+    RGBD/AngularUpdate: "0.1"   
+
+    Reg/Force3DoF: "true"     
     
     Kp/DetectorStrategy: "2"         
     Vis/FeatureType: "2"             
@@ -57,6 +59,8 @@ rgbd_odometry:
     wait_for_transform: 2.0
     # Enable IMU for true Visual-Inertial Odometry inside RTAB-Map
     wait_imu_to_init: true 
+
+    Odom/Force2D: "true"
     
     # Copy your tuning parameters here so the odometry node actually uses them
     Odom/Strategy: "0" # Frame-to-Map (F2M)
