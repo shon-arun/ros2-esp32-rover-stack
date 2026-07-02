@@ -36,5 +36,5 @@ ekf_filter_node:
                    true,  true,  true,   # <--- Fuse Visual Vroll, Vpitch, Vyaw
                    false, false, false]
 
-    imu0_remove_gravitational_acceleration: true
+    imu0_remove_gravitational_acceleration: false
     
