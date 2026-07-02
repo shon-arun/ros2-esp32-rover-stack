@@ -1,8 +1,8 @@
 ekf_filter_node:
   ros__parameters:
     frequency: 30.0
-    two_d_mode: true  
-    publish_tf: true
+    two_d_mode: false
+    publish_tf: true       
 
     map_frame: map
     odom_frame: odom
@@ -11,30 +11,26 @@ ekf_filter_node:
 
     # --- SENSOR 1: Wheel Odometry ---
     odom0: /odom
-    # Feed X-velocity and Yaw-velocity from the filtered wheels
     odom0_config: [false, false, false,
                    false, false, false,
                    true,  true, false,
-                   false, false, true,    # <--- CORRECTED: Now fusing Vyaw (angular.z)
+                   false, false, true,    
                    false, false, false]
 
     # --- SENSOR 2: IMU ---
     imu0: /imu/data
-    # We feed the EKF everything except absolute X/Y/Z position.
     imu0_config: [false, false, false,
-                  false, false, true,
+                  true,  true,  true,
                   false, false, false,
-                  false, false, true,
+                  true,  true,  true,
                   false, false, false]
     
     # --- SENSOR 3: Visual Odometry from RTAB-Map ---
     odom1: /vo
-    # We fuse relative visual velocities (the second row of 6 booleans)
     odom1_config: [false, false, false,
                    false, false, false,
                    true,  true,  false,
-                   false, false, true,
+                   true,  true,  true,
                    false, false, false]
 
-    imu0_remove_gravitational_acceleration: false
-    
+    imu0_remove_gravitational_acceleration: true
