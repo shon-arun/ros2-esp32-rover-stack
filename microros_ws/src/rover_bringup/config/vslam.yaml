@@ -1,5 +1,6 @@
 rtabmap:
   ros__parameters:
+    approx_sync: true
     qos_image: 2
     qos_camera_info: 2
     
@@ -35,6 +36,7 @@ rtabmap:
 
 rtabmap_viz:
   ros__parameters:
+    approx_sync: true
     qos_image: 2
     qos_camera_info: 2
 
@@ -49,6 +51,7 @@ rtabmap_viz:
 
 rgbd_odometry:
   ros__parameters:
+    approx_sync: true
     qos_image: 2
     qos_camera_info: 2
     wait_for_transform: 2.0
