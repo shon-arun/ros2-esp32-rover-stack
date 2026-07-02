@@ -446,7 +446,7 @@ void micro_ros_task(void * arg) {
           }
       }
     }
-    vTaskDelay(5 / portTICK_PERIOD_MS);
+    vTaskDelay(20 / portTICK_PERIOD_MS);
   }
 }
 

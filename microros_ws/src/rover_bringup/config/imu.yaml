@@ -1,6 +1,6 @@
 # MPU6500 characteristics
 rostopic: /imu/data_raw
-update_rate: 100.0
+update_rate: 50.0
 
 # Accelerometer parameters
 accelerometer_noise_density: 0.02
